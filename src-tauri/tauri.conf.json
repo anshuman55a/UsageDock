@@ -13,7 +13,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "DevMeter",
+        "title": "AIUsageHub",
         "width": 380,
         "height": 520,
         "resizable": false,
@@ -29,7 +29,9 @@
   },
   "bundle": {
     "active": true,
-    "targets": "all",
+    "targets": [
+      "nsis"
+    ],
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
@@ -38,8 +40,13 @@
       "icons/icon.ico"
     ],
     "windows": {
+      "webviewInstallMode": {
+        "type": "downloadBootstrapper",
+        "silent": true
+      },
       "nsis": {
-        "displayLanguageSelector": false
+        "displayLanguageSelector": false,
+        "installMode": "currentUser"
       }
     }
   }
