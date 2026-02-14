@@ -41,6 +41,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "aiusagehub"
+version = "0.1.0"
+dependencies = [
+ "base64 0.22.1",
+ "dirs",
+ "log",
+ "reqwest 0.12.28",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "tauri",
+ "tauri-build",
+ "tauri-plugin-log",
+ "tauri-plugin-opener",
+ "tokio",
+]
+
+[[package]]
 name = "alloc-no-stdlib"
 version = "2.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -789,24 +807,6 @@ dependencies = [
  "quote",
  "rustc_version",
  "syn 2.0.114",
-]
-
-[[package]]
-name = "devmeter"
-version = "0.1.0"
-dependencies = [
- "base64 0.22.1",
- "dirs",
- "log",
- "reqwest 0.12.28",
- "rusqlite",
- "serde",
- "serde_json",
- "tauri",
- "tauri-build",
- "tauri-plugin-log",
- "tauri-plugin-opener",
- "tokio",
 ]
 
 [[package]]

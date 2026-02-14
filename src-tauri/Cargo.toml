@@ -1,12 +1,12 @@
 [package]
-name = "devmeter"
+name = "aiusagehub"
 version = "0.1.0"
 description = "Cross-platform AI coding subscription usage tracker"
 authors = ["anshu"]
 edition = "2021"
 
 [lib]
-name = "devmeter_lib"
+name = "aiusagehub_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
