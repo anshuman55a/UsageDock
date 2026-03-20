@@ -12,7 +12,6 @@ Built with **Tauri v2**, **React**, **TypeScript**, and **Rust**.
 | **Claude** | `~/.claude/.credentials.json` | Session, weekly, extra usage |
 | **GitHub Copilot** | `gh` CLI config (`hosts.yml`) | Premium, chat, completions quota |
 | **Codex** (OpenAI) | `~/.codex/auth.json` | Session, weekly, credits |
-| **Antigravity** | SQLite DB (`state.vscdb`) | Per-model quota (Gemini, Claude, etc.) |
 | **Windsurf** | SQLite DB (`state.vscdb`) + local LS | Prompt & flex credits |
 
 ## Features
@@ -94,7 +93,6 @@ src-tauri/              # Rust backend
 │       ├── claude.rs
 │       ├── copilot.rs
 │       ├── codex.rs
-│       ├── antigravity.rs
 │       └── windsurf.rs
 ├── Cargo.toml
 └── tauri.conf.json

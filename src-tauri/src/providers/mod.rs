@@ -64,7 +64,6 @@ pub mod cursor;
 pub mod claude;
 pub mod copilot;
 pub mod codex;
-pub mod antigravity;
 pub mod windsurf;
 
 /// Get metadata for all supported providers
@@ -93,12 +92,6 @@ pub fn list_providers() -> Vec<ProviderMeta> {
             name: "Codex".into(),
             icon: "codex".into(),
             brand_color: "#000000".into(),
-        },
-        ProviderMeta {
-            id: "antigravity".into(),
-            name: "Antigravity".into(),
-            icon: "antigravity".into(),
-            brand_color: "#4285F4".into(),
         },
         ProviderMeta {
             id: "windsurf".into(),
@@ -132,7 +125,6 @@ pub fn probe_provider(id: &str) -> ProviderResult {
         "claude" => claude::probe(),
         "copilot" => copilot::probe(),
         "codex" => codex::probe(),
-        "antigravity" => antigravity::probe(),
         "windsurf" => windsurf::probe(),
         _ => Err(format!("Unknown provider: {}", id)),
     };

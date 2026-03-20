@@ -50,7 +50,6 @@ const PROVIDER_STYLES: Record<string, { bg: string }> = {
   claude: { bg: "#D97757" },
   copilot: { bg: "#000000" },
   codex: { bg: "#000000" },
-  antigravity: { bg: "#4285F4" },
   windsurf: { bg: "#00B4D8" },
 };
 
