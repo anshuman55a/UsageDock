@@ -258,7 +258,7 @@ function App() {
       <div className="header">
         <div className="header-title">
           <Gauge />
-          <span>AIUsageHub</span>
+          <span>UsageDock</span>
         </div>
         <div className="header-actions">
           <button

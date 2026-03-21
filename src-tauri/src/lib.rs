@@ -2,11 +2,11 @@ mod providers;
 
 use tauri::{
     Manager,
-    tray::{TrayIconBuilder, MouseButton, MouseButtonState, TrayIconEvent},
     menu::{Menu, MenuItem},
+    tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
 };
 
-use providers::{ProviderResult, ProviderMeta, probe_provider, list_providers};
+use providers::{ProviderMeta, ProviderResult, list_providers, probe_provider};
 
 #[tauri::command]
 fn get_providers() -> Vec<ProviderMeta> {
@@ -85,9 +85,10 @@ fn position_window_near_tray(_app: &tauri::AppHandle, window: &tauri::WebviewWin
         let x = monitor_pos.x + monitor_size.width as i32 - win_width - margin;
         let y = monitor_pos.y + monitor_size.height as i32 - win_height - taskbar_height;
 
-        let _ = window.set_position(tauri::Position::Physical(
-            tauri::PhysicalPosition { x, y },
-        ));
+        let _ = window.set_position(tauri::Position::Physical(tauri::PhysicalPosition {
+            x,
+            y,
+        }));
     }
 }
 
@@ -97,7 +98,7 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .setup(|app| {
             // Build context menu
-            let show_i = MenuItem::with_id(app, "show", "Show AIUsageHub", true, None::<&str>)?;
+            let show_i = MenuItem::with_id(app, "show", "Show UsageDock", true, None::<&str>)?;
             let quit_i = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
             let menu = Menu::with_items(app, &[&show_i, &quit_i])?;
 
@@ -105,34 +106,30 @@ pub fn run() {
             let _tray = TrayIconBuilder::new()
                 .icon(app.default_window_icon().unwrap().clone())
                 .menu(&menu)
-                .tooltip("AIUsageHub — AI Usage Tracker")
-                .on_menu_event(|app, event| {
-                    match event.id.as_ref() {
-                        "show" => {
-                            if let Some(window) = app.get_webview_window("main") {
-                                let app_clone = app.clone();
-                                position_window_near_tray(&app_clone, &window);
-                                let _ = window.show();
-                                let _ = window.set_focus();
-                            }
-                        },
-                        "quit" => {
-                            app.exit(0);
-                        },
-                        _ => {}
+                .tooltip("UsageDock - AI Usage Tracker")
+                .on_menu_event(|app, event| match event.id.as_ref() {
+                    "show" => {
+                        if let Some(window) = app.get_webview_window("main") {
+                            let app_clone = app.clone();
+                            position_window_near_tray(&app_clone, &window);
+                            let _ = window.show();
+                            let _ = window.set_focus();
+                        }
                     }
+                    "quit" => {
+                        app.exit(0);
+                    }
+                    _ => {}
                 })
-                .on_tray_icon_event(|app, event| {
-                    match event {
-                        TrayIconEvent::Click {
-                            button: MouseButton::Left,
-                            button_state: MouseButtonState::Up,
-                            ..
-                        } => {
-                            toggle_panel(app.app_handle());
-                        },
-                        _ => {}
+                .on_tray_icon_event(|app, event| match event {
+                    TrayIconEvent::Click {
+                        button: MouseButton::Left,
+                        button_state: MouseButtonState::Up,
+                        ..
+                    } => {
+                        toggle_panel(app.app_handle());
                     }
+                    _ => {}
                 })
                 .build(app)?;
 
@@ -149,11 +146,7 @@ pub fn run() {
 
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![
-            get_providers,
-            probe,
-            probe_all,
-        ])
+        .invoke_handler(tauri::generate_handler![get_providers, probe, probe_all])
         .run(tauri::generate_context!())
-        .expect("Error while running AIUsageHub");
+        .expect("Error while running UsageDock");
 }

@@ -1,32 +1,28 @@
-# AIUsageHub
+# UsageDock
 
-A cross-platform system tray app that tracks your AI coding subscription usage — all in one place.
+A cross-platform system tray app that tracks your AI coding subscription usage in one place.
 
 Built with **Tauri v2**, **React**, **TypeScript**, and **Rust**.
 
 ## Supported Providers
 
 | Provider | Auth Source | Data Fetched |
-|----------|-----------|--------------|
+|----------|-------------|--------------|
 | **Cursor** | SQLite DB (`state.vscdb`) | Plan usage, on-demand spend |
 | **Claude** | `~/.claude/.credentials.json` | Session, weekly, extra usage |
 | **GitHub Copilot** | `gh` CLI config (`hosts.yml`) | Premium, chat, completions quota |
 | **Codex** (OpenAI) | `~/.codex/auth.json` | Session, weekly, credits |
-| **Windsurf** | SQLite DB (`state.vscdb`) + local LS | Prompt & flex credits |
+| **Windsurf** | SQLite DB (`state.vscdb`) + local LS | Prompt and flex credits |
 
 ## Features
 
-- 🖥️ **System tray** — lives in your taskbar, click to open
-- 📊 **Usage progress bars** — color-coded green → yellow → orange → red
-- 🔄 **Auto-refresh** — updates every 15 minutes
-- 🎨 **Official icons** — each provider shows its real logo
-- ⚡ **Per-provider refresh** — refresh individual providers on demand
-- 🔒 **Local-only** — credentials never leave your machine
-- 🪟 **Cross-platform** — Windows & Linux (macOS planned)
-
-## Screenshots
-
-_Coming soon_
+- System tray app that lives in your taskbar
+- Usage progress bars with color-coded thresholds
+- Auto-refresh every 15 minutes
+- Official provider icons
+- Per-provider refresh on demand
+- Local-only credential access
+- Cross-platform support for Windows and Linux
 
 ## Getting Started
 
@@ -34,14 +30,14 @@ _Coming soon_
 
 - [Node.js](https://nodejs.org/) (v18+)
 - [Rust](https://rustup.rs/) (stable)
-- **Windows**: [Visual Studio Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/) with C++ workload
+- **Windows**: [Visual Studio Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/) with the C++ workload
 
-### Install & Run
+### Install and Run
 
 ```bash
 # Clone the repo
-git clone https://github.com/anshuman55a/AIUsageHub.git
-cd AIUsageHub
+git clone https://github.com/anshuman55a/UsageDock.git
+cd UsageDock
 
 # Install dependencies
 npm install
@@ -60,12 +56,12 @@ The installer will be in `src-tauri/target/release/bundle/`.
 
 ## How It Works
 
-1. **Credentials** are read from each provider's local config files (SQLite DBs, JSON files, CLI configs)
-2. **OAuth tokens** are refreshed automatically when expired
-3. **Usage data** is fetched from each provider's API
-4. **Results** are displayed as progress bars in a compact tray popup
+1. Credentials are read from each provider's local config files.
+2. OAuth tokens are refreshed automatically when expired.
+3. Usage data is fetched from each provider's API.
+4. Results are displayed in a compact tray popup.
 
-No API keys to configure — if you're signed into the tool, AIUsageHub picks up your credentials automatically.
+No API keys to configure. If you're signed into the tool, UsageDock picks up your credentials automatically.
 
 ## Tech Stack
 
@@ -77,25 +73,25 @@ No API keys to configure — if you're signed into the tool, AIUsageHub picks up
 
 ## Project Structure
 
-```
+```text
 src/                    # React frontend
-├── App.tsx             # Main UI with provider cards
-├── App.css             # Dark theme styles
-├── ProviderIcons.tsx   # Official SVG icons
-└── main.tsx            # Entry point
+|- App.tsx              # Main UI with provider cards
+|- App.css              # Dark theme styles
+|- ProviderIcons.tsx    # Official SVG icons
+`- main.tsx             # Entry point
 
 src-tauri/              # Rust backend
-├── src/
-│   ├── lib.rs          # Tray icon, window management
-│   └── providers/
-│       ├── mod.rs      # Provider types & dispatcher
-│       ├── cursor.rs
-│       ├── claude.rs
-│       ├── copilot.rs
-│       ├── codex.rs
-│       └── windsurf.rs
-├── Cargo.toml
-└── tauri.conf.json
+|- src/
+|  |- lib.rs            # Tray icon, window management
+|  `- providers/
+|     |- mod.rs         # Provider types and dispatcher
+|     |- cursor.rs
+|     |- claude.rs
+|     |- copilot.rs
+|     |- codex.rs
+|     `- windsurf.rs
+|- Cargo.toml
+`- tauri.conf.json
 ```
 
 ## License
