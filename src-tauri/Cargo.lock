@@ -4938,7 +4938,7 @@ dependencies = [
 
 [[package]]
 name = "usagedock"
-version = "0.1.0"
+version = "0.1.7"
 dependencies = [
  "base64 0.22.1",
  "dirs",
