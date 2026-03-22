@@ -1,8 +1,12 @@
-import { useState, useEffect, useCallback, type CSSProperties } from "react";
+import { useState, useEffect, useCallback, useRef, type CSSProperties } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { RefreshCw, AlertCircle, ChevronDown } from "lucide-react";
 import { PROVIDER_ICONS } from "./ProviderIcons";
 import "./App.css";
+
+const AUTO_REFRESH_ENABLED_KEY = "usagedock:autoRefreshEnabled";
+const AUTO_REFRESH_MINUTES_KEY = "usagedock:autoRefreshMinutes";
+const AUTO_REFRESH_OPTIONS = [5, 10, 15, 30, 60] as const;
 
 // Types matching the Rust backend
 interface MetricFormat {
@@ -246,6 +250,18 @@ function App() {
   const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [showUnavailable, setShowUnavailable] = useState(false);
+  const [autoRefreshEnabled, setAutoRefreshEnabled] = useState(() => {
+    if (typeof window === "undefined") return true;
+    const stored = window.localStorage.getItem(AUTO_REFRESH_ENABLED_KEY);
+    return stored === null ? true : stored === "true";
+  });
+  const [autoRefreshMinutes, setAutoRefreshMinutes] = useState<number>(() => {
+    if (typeof window === "undefined") return 15;
+    const stored = Number(window.localStorage.getItem(AUTO_REFRESH_MINUTES_KEY));
+    return AUTO_REFRESH_OPTIONS.includes(stored as (typeof AUTO_REFRESH_OPTIONS)[number]) ? stored : 15;
+  });
+  const [isIntervalMenuOpen, setIsIntervalMenuOpen] = useState(false);
+  const intervalMenuRef = useRef<HTMLDivElement>(null);
   const availableProviders = providers.filter((provider) => !provider.error && provider.lines.length > 0);
   const unavailableProviders = providers.filter((provider) => provider.error || provider.lines.length === 0);
   const unavailableCaption = availableProviders.length > 0
@@ -291,17 +307,59 @@ function App() {
 
   useEffect(() => {
     refreshAll();
-
-    // Auto-refresh every 15 minutes
-    const interval = setInterval(refreshAll, 15 * 60 * 1000);
-    return () => clearInterval(interval);
   }, [refreshAll]);
+
+  useEffect(() => {
+    window.localStorage.setItem(AUTO_REFRESH_ENABLED_KEY, String(autoRefreshEnabled));
+  }, [autoRefreshEnabled]);
+
+  useEffect(() => {
+    window.localStorage.setItem(AUTO_REFRESH_MINUTES_KEY, String(autoRefreshMinutes));
+  }, [autoRefreshMinutes]);
+
+  useEffect(() => {
+    if (!autoRefreshEnabled) {
+      return;
+    }
+
+    const interval = window.setInterval(refreshAll, autoRefreshMinutes * 60 * 1000);
+    return () => window.clearInterval(interval);
+  }, [autoRefreshEnabled, autoRefreshMinutes, refreshAll]);
 
   useEffect(() => {
     if (availableProviders.length === 0 && unavailableProviders.length > 0) {
       setShowUnavailable(true);
     }
   }, [availableProviders.length, unavailableProviders.length]);
+
+  useEffect(() => {
+    if (!isIntervalMenuOpen) {
+      return;
+    }
+
+    function handlePointerDown(event: MouseEvent) {
+      if (!intervalMenuRef.current?.contains(event.target as Node)) {
+        setIsIntervalMenuOpen(false);
+      }
+    }
+
+    function handleEscape(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setIsIntervalMenuOpen(false);
+      }
+    }
+
+    window.addEventListener("mousedown", handlePointerDown);
+    window.addEventListener("keydown", handleEscape);
+    return () => {
+      window.removeEventListener("mousedown", handlePointerDown);
+      window.removeEventListener("keydown", handleEscape);
+    };
+  }, [isIntervalMenuOpen]);
+
+  const autoRefreshSummary = autoRefreshEnabled
+    ? `Auto refresh every ${autoRefreshMinutes} min`
+    : "Auto refresh off";
 
   return (
     <div className="app-shell">
@@ -384,12 +442,66 @@ function App() {
       </div>
 
       <div className="footer">
-        <span className="footer-text">
-          {lastRefresh
-            ? `Updated ${lastRefresh.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`
-            : "Loading provider activity"}
-        </span>
-        <span className="footer-text">Auto refresh every 15 min</span>
+        <div className="footer-row">
+          <span className="footer-text">
+            {lastRefresh
+              ? `Updated ${lastRefresh.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`
+              : "Loading provider activity"}
+          </span>
+          <span className="footer-text">{autoRefreshSummary}</span>
+        </div>
+        <div className="footer-row footer-controls">
+          <label className="toggle-field">
+            <span className="toggle-label">Auto refresh</span>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={autoRefreshEnabled}
+              className={`toggle-switch ${autoRefreshEnabled ? "toggle-switch-on" : ""}`}
+              onClick={() => setAutoRefreshEnabled((prev) => !prev)}
+            >
+              <span className="toggle-thumb" />
+            </button>
+          </label>
+
+          <div
+            ref={intervalMenuRef}
+            className={`select-field ${!autoRefreshEnabled ? "select-field-disabled" : ""}`}
+          >
+            <span className="select-label">Interval</span>
+            <button
+              type="button"
+              className="footer-select interval-trigger"
+              onClick={() => autoRefreshEnabled && setIsIntervalMenuOpen((prev) => !prev)}
+              disabled={!autoRefreshEnabled}
+              aria-haspopup="listbox"
+              aria-expanded={isIntervalMenuOpen}
+            >
+              {autoRefreshMinutes} min
+              <ChevronDown className={`interval-trigger-icon ${isIntervalMenuOpen ? "interval-trigger-icon-open" : ""}`} />
+            </button>
+            {autoRefreshEnabled && isIntervalMenuOpen && (
+              <div className="interval-menu" role="listbox" aria-label="Auto refresh interval">
+                {AUTO_REFRESH_OPTIONS.map((minutes) => (
+                  <button
+                    key={minutes}
+                    type="button"
+                    role="option"
+                    aria-selected={minutes === autoRefreshMinutes}
+                    className={`interval-option ${minutes === autoRefreshMinutes ? "interval-option-active" : ""}`}
+                    onClick={() => {
+                      setAutoRefreshMinutes(minutes);
+                      setIsIntervalMenuOpen(false);
+                    }}
+                  >
+                    <span>{minutes} min</span>
+                    {minutes === autoRefreshMinutes && <span className="interval-option-check">Current</span>}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
       </div>
     </div>
   );
