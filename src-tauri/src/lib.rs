@@ -63,12 +63,17 @@ fn toggle_panel(app: &tauri::AppHandle) {
         if window.is_visible().unwrap_or(false) {
             let _ = window.hide();
         } else {
-            // Position near tray (bottom-right for Windows)
-            position_window_near_tray(app, &window);
-            let _ = window.show();
-            let _ = window.set_focus();
+            show_panel(app, &window);
         }
     }
+}
+
+fn show_panel(app: &tauri::AppHandle, window: &tauri::WebviewWindow) {
+    // Position near tray (bottom-right for Windows)
+    position_window_near_tray(app, window);
+    let _ = window.show();
+    let _ = window.unminimize();
+    let _ = window.set_focus();
 }
 
 fn position_window_near_tray(_app: &tauri::AppHandle, window: &tauri::WebviewWindow) {
@@ -112,6 +117,11 @@ fn hide_window_if_still_blurred(window: tauri::WebviewWindow) {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            if let Some(window) = app.get_webview_window("main") {
+                show_panel(app, &window);
+            }
+        }))
         .plugin(tauri_plugin_opener::init())
         .setup(|app| {
             // Build context menu
@@ -127,10 +137,7 @@ pub fn run() {
                 .on_menu_event(|app, event| match event.id.as_ref() {
                     "show" => {
                         if let Some(window) = app.get_webview_window("main") {
-                            let app_clone = app.clone();
-                            position_window_near_tray(&app_clone, &window);
-                            let _ = window.show();
-                            let _ = window.set_focus();
+                            show_panel(app.app_handle(), &window);
                         }
                     }
                     "quit" => {
