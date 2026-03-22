@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, type CSSProperties } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { RefreshCw, AlertCircle, Gauge } from "lucide-react";
+import { RefreshCw, AlertCircle, ChevronDown } from "lucide-react";
 import { PROVIDER_ICONS } from "./ProviderIcons";
 import "./App.css";
 
@@ -52,6 +52,20 @@ const PROVIDER_STYLES: Record<string, { bg: string }> = {
   codex: { bg: "#000000" },
   windsurf: { bg: "#00B4D8" },
 };
+
+function BoltIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path
+        d="M13.5 1.5 5 13h5l-1.5 9.5L19 10h-5.25L13.5 1.5Z"
+        fill="currentColor"
+        stroke="currentColor"
+        strokeLinejoin="round"
+        strokeWidth="1"
+      />
+    </svg>
+  );
+}
 
 function formatValue(used: number, limit: number, format: MetricFormat): string {
   switch (format.kind) {
@@ -231,6 +245,12 @@ function App() {
   const [refreshing, setRefreshing] = useState<Set<string>>(new Set());
   const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [showUnavailable, setShowUnavailable] = useState(false);
+  const availableProviders = providers.filter((provider) => !provider.error && provider.lines.length > 0);
+  const unavailableProviders = providers.filter((provider) => provider.error || provider.lines.length === 0);
+  const unavailableCaption = availableProviders.length > 0
+    ? `${unavailableProviders.length} hidden until needed`
+    : `${unavailableProviders.length} provider${unavailableProviders.length === 1 ? "" : "s"} need attention`;
   const connectedProviders = providers.filter((provider) => !provider.error && provider.lines.length > 0).length;
   const statusText = isLoading
     ? "Refreshing local usage"
@@ -277,12 +297,18 @@ function App() {
     return () => clearInterval(interval);
   }, [refreshAll]);
 
+  useEffect(() => {
+    if (availableProviders.length === 0 && unavailableProviders.length > 0) {
+      setShowUnavailable(true);
+    }
+  }, [availableProviders.length, unavailableProviders.length]);
+
   return (
     <div className="app-shell">
       <div className="header">
         <div className="header-title">
           <div className="header-mark">
-            <Gauge />
+            <BoltIcon />
           </div>
           <div className="header-copy">
             <span className="header-product">UsageDock</span>
@@ -306,7 +332,7 @@ function App() {
       </div>
 
       <div className="provider-list">
-        {providers.map((provider) => (
+        {availableProviders.map((provider) => (
           <ProviderCard
             key={provider.id}
             provider={provider}
@@ -315,9 +341,43 @@ function App() {
           />
         ))}
 
+        {!isLoading && unavailableProviders.length > 0 && (
+          <section className={`provider-collapse ${showUnavailable ? "provider-collapse-open" : ""}`}>
+            <button
+              className="provider-collapse-toggle"
+              type="button"
+              onClick={() => setShowUnavailable((prev) => !prev)}
+              aria-expanded={showUnavailable}
+              aria-controls="unavailable-providers"
+            >
+              <div className="provider-collapse-copy">
+                <span className="provider-collapse-title">Unavailable providers</span>
+                <span className="provider-collapse-caption">{unavailableCaption}</span>
+              </div>
+              <div className="provider-collapse-action">
+                <span className="provider-collapse-count">{unavailableProviders.length}</span>
+                <ChevronDown className="provider-collapse-icon" />
+              </div>
+            </button>
+
+            {showUnavailable && (
+              <div id="unavailable-providers" className="provider-collapse-body">
+                {unavailableProviders.map((provider) => (
+                  <ProviderCard
+                    key={provider.id}
+                    provider={provider}
+                    onRefresh={() => refreshSingle(provider.id)}
+                    isRefreshing={refreshing.has(provider.id)}
+                  />
+                ))}
+              </div>
+            )}
+          </section>
+        )}
+
         {!isLoading && providers.length === 0 && (
           <div className="empty-state">
-            <Gauge />
+            <BoltIcon />
             <p>No providers configured.<br />Sign into Cursor, Claude, Copilot, or Codex to get started.</p>
           </div>
         )}

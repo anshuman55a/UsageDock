@@ -235,6 +235,94 @@ body {
   padding: 12px 10px 14px;
 }
 
+.provider-collapse {
+  margin-top: 2px;
+  border: 1px solid rgba(148, 163, 184, 0.1);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.025);
+  overflow: hidden;
+}
+
+.provider-collapse-open {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.provider-collapse-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  padding: 13px 14px;
+  border: none;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
+.provider-collapse-toggle:hover {
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.provider-collapse-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.provider-collapse-title {
+  color: var(--color-text-primary);
+  font-size: 12px;
+  font-weight: 620;
+  letter-spacing: -0.01em;
+}
+
+.provider-collapse-caption {
+  color: var(--color-text-muted);
+  font-size: 11px;
+}
+
+.provider-collapse-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.provider-collapse-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  height: 24px;
+  padding: 0 8px;
+  border: 1px solid rgba(148, 163, 184, 0.12);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--color-text-secondary);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.provider-collapse-icon {
+  width: 15px;
+  height: 15px;
+  color: var(--color-text-muted);
+  transition: transform 0.2s ease, color 0.2s ease;
+}
+
+.provider-collapse-open .provider-collapse-icon {
+  transform: rotate(180deg);
+  color: var(--color-text-secondary);
+}
+
+.provider-collapse-body {
+  padding: 0 10px 10px;
+  border-top: 1px solid rgba(148, 163, 184, 0.08);
+}
+
 .provider-card {
   --provider-accent: var(--color-accent);
   --provider-accent-soft: var(--color-accent-soft);
