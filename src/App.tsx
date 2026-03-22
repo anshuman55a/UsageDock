@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, type CSSProperties } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { RefreshCw, AlertCircle, Gauge } from "lucide-react";
 import { PROVIDER_ICONS } from "./ProviderIcons";
@@ -115,7 +115,7 @@ function ProgressMetric({ line }: { line: ProgressLine }) {
 
 // Badge Component
 function BadgeMetric({ line }: { line: BadgeLine }) {
-  const color = line.color || "#6366f1";
+  const color = line.color || "#7da88c";
   return (
     <div className="badge-line">
       <span className="badge-label">{line.label}</span>
@@ -148,23 +148,42 @@ function ProviderCard({
 }) {
   const style = PROVIDER_STYLES[provider.id] || { bg: "#666" };
   const IconComponent = PROVIDER_ICONS[provider.id];
+  const accent = provider.brandColor || style.bg;
+  const providerStateLabel = provider.error
+    ? "Connection needs attention"
+    : isRefreshing
+      ? "Refreshing usage..."
+      : provider.lines.length > 0
+        ? `${provider.lines.length} live signal${provider.lines.length === 1 ? "" : "s"}`
+        : "Waiting for usage signals";
+  const providerCardStyle = {
+    "--provider-accent": accent,
+    "--provider-accent-soft": `${accent}20`,
+  } as CSSProperties;
 
   return (
-    <div className="provider-card">
+    <div
+      className={`provider-card ${provider.error ? "provider-card-error" : ""}`}
+      style={providerCardStyle}
+    >
       <div className="provider-card-header">
         <div className="provider-info">
           <div className="provider-icon" style={{ background: style.bg }}>
             {IconComponent ? <IconComponent /> : "?"}
           </div>
-          <div>
-            <div className="provider-name">{provider.name}</div>
-            {provider.plan && <div className="provider-plan">{provider.plan} plan</div>}
+          <div className="provider-copy">
+            <div className="provider-name-row">
+              <div className="provider-name">{provider.name}</div>
+              {provider.plan && <div className="provider-plan">{provider.plan}</div>}
+            </div>
+            <div className="provider-caption">{providerStateLabel}</div>
           </div>
         </div>
         <button
           className={`btn-icon provider-refresh ${isRefreshing ? "spinning" : ""}`}
           onClick={onRefresh}
           title="Refresh"
+          aria-label={`Refresh ${provider.name}`}
         >
           <RefreshCw />
         </button>
@@ -212,6 +231,12 @@ function App() {
   const [refreshing, setRefreshing] = useState<Set<string>>(new Set());
   const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const connectedProviders = providers.filter((provider) => !provider.error && provider.lines.length > 0).length;
+  const statusText = isLoading
+    ? "Refreshing local usage"
+    : providers.length === 0
+      ? "Waiting for connected tools"
+      : `${connectedProviders} of ${providers.length} providers reporting`;
 
   const refreshAll = useCallback(async () => {
     setIsLoading(true);
@@ -254,24 +279,32 @@ function App() {
 
   return (
     <div className="app-shell">
-      {/* Header */}
       <div className="header">
         <div className="header-title">
-          <Gauge />
-          <span>UsageDock</span>
+          <div className="header-mark">
+            <Gauge />
+          </div>
+          <div className="header-copy">
+            <span className="header-product">UsageDock</span>
+            <span className="header-subtitle">Quiet local usage signals for AI coding tools</span>
+          </div>
         </div>
         <div className="header-actions">
+          <div className={`header-status ${isLoading ? "header-status-live" : ""}`}>
+            <span className="header-status-dot" />
+            <span>{statusText}</span>
+          </div>
           <button
-            className={`btn-icon ${isLoading ? "spinning" : ""}`}
+            className={`btn-icon refresh-all ${isLoading ? "spinning" : ""}`}
             onClick={refreshAll}
             title="Refresh all"
+            aria-label="Refresh all providers"
           >
             <RefreshCw />
           </button>
         </div>
       </div>
 
-      {/* Provider Cards */}
       <div className="provider-list">
         {providers.map((provider) => (
           <ProviderCard
@@ -290,14 +323,13 @@ function App() {
         )}
       </div>
 
-      {/* Footer */}
       <div className="footer">
         <span className="footer-text">
           {lastRefresh
             ? `Updated ${lastRefresh.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`
-            : "Loading..."}
+            : "Loading provider activity"}
         </span>
-        <span className="footer-text">v0.1.0</span>
+        <span className="footer-text">Auto refresh every 15 min</span>
       </div>
     </div>
   );
