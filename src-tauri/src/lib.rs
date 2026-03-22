@@ -1,5 +1,7 @@
 mod providers;
 
+use std::time::Duration;
+
 use tauri::{
     Manager,
     menu::{Menu, MenuItem},
@@ -7,6 +9,8 @@ use tauri::{
 };
 
 use providers::{ProviderMeta, ProviderResult, list_providers, probe_provider};
+
+const BLUR_HIDE_DEBOUNCE_MS: u64 = 180;
 
 #[tauri::command]
 fn get_providers() -> Vec<ProviderMeta> {
@@ -92,6 +96,19 @@ fn position_window_near_tray(_app: &tauri::AppHandle, window: &tauri::WebviewWin
     }
 }
 
+fn hide_window_if_still_blurred(window: tauri::WebviewWindow) {
+    tauri::async_runtime::spawn(async move {
+        tokio::time::sleep(Duration::from_millis(BLUR_HIDE_DEBOUNCE_MS)).await;
+
+        let is_visible = window.is_visible().unwrap_or(false);
+        let is_focused = window.is_focused().unwrap_or(false);
+
+        if is_visible && !is_focused {
+            let _ = window.hide();
+        }
+    });
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -139,7 +156,7 @@ pub fn run() {
                 let w = window.clone();
                 window.on_window_event(move |event| {
                     if let tauri::WindowEvent::Focused(false) = event {
-                        let _ = w.hide();
+                        hide_window_if_still_blurred(w.clone());
                     }
                 });
             }
