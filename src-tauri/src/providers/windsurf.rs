@@ -1,5 +1,14 @@
 use super::{MetricLine, MetricFormat};
 
+#[cfg(target_os = "windows")]
+use std::collections::BTreeSet;
+
+#[cfg(target_os = "windows")]
+use std::os::windows::process::CommandExt;
+
+#[cfg(target_os = "windows")]
+const CREATE_NO_WINDOW: u32 = 0x08000000;
+
 /// Windsurf stores its state in a VSCode-style SQLite DB
 fn get_state_db_paths() -> Vec<String> {
     let data_dir = if cfg!(target_os = "windows") {
@@ -49,57 +58,95 @@ fn load_api_key(db_path: &str) -> Option<String> {
         .map(|s| s.to_string())
 }
 
+struct LocalLsDiscovery {
+    ports: Vec<u16>,
+    csrf: String,
+    version: String,
+}
+
+fn extract_flag(command: &str, flag: &str) -> Option<String> {
+    let parts: Vec<&str> = command.split_whitespace().collect();
+    let flag_eq = format!("{}=", flag);
+
+    for (i, part) in parts.iter().enumerate() {
+        if *part == flag {
+            if i + 1 < parts.len() {
+                return Some(parts[i + 1].to_string());
+            }
+        } else if part.starts_with(&flag_eq) {
+            return Some(part[flag_eq.len()..].to_string());
+        }
+    }
+
+    None
+}
+
 /// Try to find the LS port by scanning running processes
 /// Windsurf LS runs with --extension_server_port and --csrf_token flags
-fn discover_ls_from_processes() -> Option<(u16, String)> {
-    // On Windows, use wmic or tasklist to find the language server process
+fn discover_ls(variant_marker: &str) -> Option<LocalLsDiscovery> {
     #[cfg(target_os = "windows")]
     {
-        let output = std::process::Command::new("wmic")
-            .args(["process", "where", "name like '%language_server%'", "get", "commandline"])
-            .output()
-            .ok()?;
-
-        let stdout = String::from_utf8_lossy(&output.stdout);
-        parse_ls_args(&stdout)
+        discover_windows_ls(variant_marker)
     }
 
     #[cfg(target_os = "linux")]
     {
-        let output = std::process::Command::new("ps")
-            .args(["aux"])
-            .output()
-            .ok()?;
+        let output = match std::process::Command::new("ps").args(["aux"]).output() {
+            Ok(output) => output,
+            Err(_) => return None,
+        };
 
         let stdout = String::from_utf8_lossy(&output.stdout);
-        // Find lines with language_server that have windsurf markers
-        for line in stdout.lines() {
-            if line.contains("language_server") && line.contains("windsurf") {
-                if let Some(result) = parse_ls_args(line) {
-                    return Some(result);
-                }
-            }
-        }
-        None
+        collect_ls_candidates(&stdout, variant_marker).into_iter().next().map(|(ports, csrf)| LocalLsDiscovery {
+            ports,
+            csrf,
+            version: "unknown".into(),
+        })
     }
 
     #[cfg(target_os = "macos")]
     {
+        let _ = variant_marker;
         None
     }
 }
 
+#[cfg(target_os = "linux")]
+fn collect_ls_candidates(text: &str, variant_marker: &str) -> Vec<(Vec<u16>, String)> {
+    let mut candidates = Vec::new();
+    for line in text.lines() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() || !trimmed.contains("language_server") {
+            continue;
+        }
+        let ide_name = extract_flag(trimmed, "--ide_name")
+            .unwrap_or_default()
+            .to_lowercase();
+        if ide_name != variant_marker {
+            continue;
+        }
+        if let Some((extension_port, csrf)) = parse_ls_args(trimmed) {
+            let mut ports = Vec::new();
+            ports.push(extension_port);
+            if !candidates.iter().any(|(existing_ports, existing_csrf)| existing_ports == &ports && existing_csrf == &csrf) {
+                candidates.push((ports, csrf));
+            }
+        }
+    }
+    candidates
+}
+
 fn parse_ls_args(text: &str) -> Option<(u16, String)> {
-    let mut port: Option<u16> = None;
+    let mut extension_port: Option<u16> = None;
     let mut csrf: Option<String> = None;
 
     let parts: Vec<&str> = text.split_whitespace().collect();
     for i in 0..parts.len() {
         if parts[i] == "--extension_server_port" || parts[i].starts_with("--extension_server_port=") {
             if parts[i].contains('=') {
-                port = parts[i].split('=').nth(1).and_then(|p| p.parse().ok());
+                extension_port = parts[i].split('=').nth(1).and_then(|p| p.parse().ok());
             } else if i + 1 < parts.len() {
-                port = parts[i + 1].parse().ok();
+                extension_port = parts[i + 1].parse().ok();
             }
         }
         if parts[i] == "--csrf_token" || parts[i].starts_with("--csrf_token=") {
@@ -111,14 +158,158 @@ fn parse_ls_args(text: &str) -> Option<(u16, String)> {
         }
     }
 
-    match (port, csrf) {
+    match (extension_port, csrf) {
         (Some(p), Some(c)) => Some((p, c)),
         _ => None,
     }
 }
 
+#[cfg(target_os = "windows")]
+fn run_hidden_powershell(script: &str) -> Option<String> {
+    let output = std::process::Command::new("powershell.exe")
+        .creation_flags(CREATE_NO_WINDOW)
+        .args([
+            "-NoProfile",
+            "-NonInteractive",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-Command",
+            script,
+        ])
+        .output()
+        .ok()?;
+
+    if !output.status.success() {
+        return None;
+    }
+
+    Some(String::from_utf8_lossy(&output.stdout).trim().to_string())
+}
+
+#[cfg(target_os = "windows")]
+fn discover_windows_ls(variant_marker: &str) -> Option<LocalLsDiscovery> {
+    let process_json = run_hidden_powershell(
+        "& { $procs = @(Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -like '*language_server*' } | Select-Object ProcessId, CommandLine); if ($procs.Count -eq 0) { '[]' } else { $procs | ConvertTo-Json -Compress } }",
+    )?;
+
+    let processes = parse_windows_json_items(&process_json);
+
+    for item in processes {
+        let process_id = item.get("ProcessId").and_then(|value| value.as_u64()).map(|value| value as u32);
+        let command = item.get("CommandLine").and_then(|value| value.as_str()).map(|value| value.to_string());
+
+        let (process_id, command) = match (process_id, command) {
+            (Some(process_id), Some(command)) => (process_id, command),
+            _ => continue,
+        };
+
+        let ide_name = extract_flag(&command, "--ide_name")
+            .unwrap_or_default()
+            .to_lowercase();
+        if ide_name != variant_marker {
+            continue;
+        }
+
+        let (extension_port, csrf) = match parse_ls_args(&command) {
+            Some(values) => values,
+            None => continue,
+        };
+
+        let version = extract_flag(&command, "--windsurf_version")
+            .unwrap_or_else(|| "unknown".into());
+
+        let port_script = format!(
+            "& {{ $ports = @(Get-NetTCPConnection -OwningProcess {} -State Listen -ErrorAction SilentlyContinue | Select-Object -ExpandProperty LocalPort); if ($ports.Count -eq 0) {{ '[]' }} else {{ $ports | ConvertTo-Json -Compress }} }}",
+            process_id
+        );
+        let ports_json = run_hidden_powershell(&port_script).unwrap_or_else(|| "[]".into());
+        let mut ports = parse_windows_ports(&ports_json);
+        if !ports.contains(&extension_port) {
+            ports.push(extension_port);
+        }
+
+        return Some(LocalLsDiscovery { ports, csrf, version });
+    }
+
+    None
+}
+
+#[cfg(target_os = "windows")]
+fn parse_windows_json_items(raw: &str) -> Vec<serde_json::Value> {
+    let value = match serde_json::from_str::<serde_json::Value>(raw) {
+        Ok(value) => value,
+        Err(_) => return Vec::new(),
+    };
+
+    match value {
+        serde_json::Value::Array(items) => items,
+        serde_json::Value::Null => Vec::new(),
+        other => vec![other],
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn parse_windows_ports(raw: &str) -> Vec<u16> {
+    let mut ports = BTreeSet::new();
+    for item in parse_windows_json_items(raw) {
+        if let Some(port) = item.as_u64().and_then(|value| u16::try_from(value).ok()) {
+            ports.insert(port);
+        }
+    }
+    ports.into_iter().collect()
+}
+
+fn probe_ls_port(port: u16, scheme: &str, csrf: &str, ide_name: &str, version: &str) -> bool {
+    let client = match reqwest::blocking::Client::builder()
+        .danger_accept_invalid_certs(true)
+        .build()
+    {
+        Ok(client) => client,
+        Err(_) => return false,
+    };
+
+    let url = format!(
+        "{}://127.0.0.1:{}/exa.language_server_pb.LanguageServerService/GetUnleashData",
+        scheme, port
+    );
+
+    let body = serde_json::json!({
+        "context": {
+            "properties": {
+                "devMode": "false",
+                "extensionVersion": version,
+                "ide": ide_name,
+                "ideVersion": version,
+                "os": if cfg!(target_os = "windows") { "windows" } else { "linux" },
+            }
+        }
+    });
+
+    client
+        .post(&url)
+        .header("Content-Type", "application/json")
+        .header("Connect-Protocol-Version", "1")
+        .header("x-codeium-csrf-token", csrf)
+        .json(&body)
+        .timeout(std::time::Duration::from_secs(5))
+        .send()
+        .is_ok()
+}
+
+fn find_working_ls_endpoint(discovery: &LocalLsDiscovery, ide_name: &str) -> Option<(u16, &'static str)> {
+    for &port in &discovery.ports {
+        if probe_ls_port(port, "https", &discovery.csrf, ide_name, &discovery.version) {
+            return Some((port, "https"));
+        }
+        if probe_ls_port(port, "http", &discovery.csrf, ide_name, &discovery.version) {
+            return Some((port, "http"));
+        }
+    }
+    None
+}
+
 /// Call the LS GetUserStatus endpoint
-fn call_ls_get_user_status(port: u16, scheme: &str, csrf: &str, api_key: &str, ide_name: &str) -> Result<serde_json::Value, String> {
+fn call_ls_get_user_status(port: u16, scheme: &str, csrf: &str, api_key: &str, ide_name: &str, version: &str) -> Result<serde_json::Value, String> {
     let client = reqwest::blocking::Client::builder()
         .danger_accept_invalid_certs(true)
         .build()
@@ -130,9 +321,9 @@ fn call_ls_get_user_status(port: u16, scheme: &str, csrf: &str, api_key: &str, i
         "metadata": {
             "apiKey": api_key,
             "ideName": ide_name,
-            "ideVersion": "unknown",
+            "ideVersion": version,
             "extensionName": ide_name,
-            "extensionVersion": "unknown",
+            "extensionVersion": version,
             "locale": "en"
         }
     });
@@ -157,15 +348,8 @@ fn call_ls_get_user_status(port: u16, scheme: &str, csrf: &str, api_key: &str, i
 }
 
 /// Try connecting to the LS on a given port with both schemes
-fn try_port(port: u16, csrf: &str, api_key: &str, ide_name: &str) -> Option<serde_json::Value> {
-    // Try HTTPS first (LS may use self-signed cert), then HTTP
-    for scheme in &["https", "http"] {
-        match call_ls_get_user_status(port, scheme, csrf, api_key, ide_name) {
-            Ok(data) => return Some(data),
-            Err(_) => continue,
-        }
-    }
-    None
+fn try_endpoint(port: u16, scheme: &str, csrf: &str, api_key: &str, ide_name: &str, version: &str) -> Option<serde_json::Value> {
+    call_ls_get_user_status(port, scheme, csrf, api_key, ide_name, version).ok()
 }
 
 pub fn probe() -> Result<(Option<String>, Vec<MetricLine>), String> {
@@ -188,11 +372,13 @@ pub fn probe() -> Result<(Option<String>, Vec<MetricLine>), String> {
     let api_key = api_key.ok_or("Windsurf not installed or not signed in.")?;
 
     // Discover LS process
-    let (port, csrf) = discover_ls_from_processes()
+    let discovery = discover_ls(variant_name)
         .ok_or("Windsurf language server not running. Start Windsurf and try again.")?;
 
-    // Call GetUserStatus
-    let data = try_port(port, &csrf, &api_key, variant_name)
+    let (port, scheme) = find_working_ls_endpoint(&discovery, variant_name)
+        .ok_or("Could not connect to Windsurf language server.")?;
+
+    let data = try_endpoint(port, scheme, &discovery.csrf, &api_key, variant_name, &discovery.version)
         .ok_or("Could not connect to Windsurf language server.")?;
 
     let user_status = data.get("userStatus")
