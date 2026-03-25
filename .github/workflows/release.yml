@@ -47,7 +47,7 @@ jobs:
       - name: enable updater artifacts
         if: env.TAURI_SIGNING_PRIVATE_KEY != '' && env.TAURI_UPDATER_PUBLIC_KEY != ''
         run: |
-          node -e "const fs = require('fs'); fs.writeFileSync('src-tauri/tauri.updater.conf.json', JSON.stringify({ bundle: { createUpdaterArtifacts: true } }, null, 2));"
+          node -e "const fs = require('fs'); const config = { bundle: { createUpdaterArtifacts: true }, plugins: { updater: { pubkey: process.env.TAURI_UPDATER_PUBLIC_KEY, endpoints: [process.env.TAURI_UPDATER_ENDPOINT], windows: { installMode: 'passive' } } } }; fs.writeFileSync('src-tauri/tauri.updater.conf.json', JSON.stringify(config, null, 2));"
 
       - uses: tauri-apps/tauri-action@v0
         if: env.TAURI_SIGNING_PRIVATE_KEY != '' && env.TAURI_UPDATER_PUBLIC_KEY != ''
