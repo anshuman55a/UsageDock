@@ -92,8 +92,13 @@ function getProgressColor(pct: number): string {
 }
 
 function timeUntilReset(isoStr: string): string {
+  const trimmed = isoStr.trim();
+  const numericReset = /^\d+$/.test(trimmed) ? Number(trimmed) : null;
+  const resetMs = numericReset !== null
+    ? (trimmed.length <= 10 ? numericReset * 1000 : numericReset)
+    : new Date(trimmed).getTime();
   const now = Date.now();
-  const resetMs = new Date(isoStr).getTime();
+  if (Number.isNaN(resetMs)) return "reset time unavailable";
   const diffMs = resetMs - now;
   if (diffMs <= 0) return "resetting...";
   const days = Math.floor(diffMs / 86400000);
@@ -102,6 +107,23 @@ function timeUntilReset(isoStr: string): string {
   const mins = Math.floor((diffMs % 3600000) / 60000);
   if (hours > 0) return `Resets in ${hours}h ${mins}m`;
   return `Resets in ${mins}m`;
+}
+
+function getSharedResetLabel(lines: MetricLine[]): string | null {
+  const resetValues = lines
+    .filter((line): line is ProgressLine => line.type === "progress" && Boolean(line.resetsAt))
+    .map((line) => line.resetsAt as string);
+
+  if (resetValues.length === 0) {
+    return null;
+  }
+
+  const uniqueValues = [...new Set(resetValues)];
+  if (uniqueValues.length !== 1) {
+    return null;
+  }
+
+  return timeUntilReset(uniqueValues[0]);
 }
 
 // Progress Bar Component
@@ -167,6 +189,7 @@ function ProviderCard({
   const style = PROVIDER_STYLES[provider.id] || { bg: "#666" };
   const IconComponent = PROVIDER_ICONS[provider.id];
   const accent = provider.brandColor || style.bg;
+  const sharedResetLabel = provider.error ? null : getSharedResetLabel(provider.lines);
   const providerStateLabel = provider.error
     ? "Connection needs attention"
     : isRefreshing
@@ -174,6 +197,9 @@ function ProviderCard({
       : provider.lines.length > 0
         ? `${provider.lines.length} live signal${provider.lines.length === 1 ? "" : "s"}`
         : "Waiting for usage signals";
+  const providerCaption = sharedResetLabel
+    ? `${providerStateLabel} - ${sharedResetLabel}`
+    : providerStateLabel;
   const providerCardStyle = {
     "--provider-accent": accent,
     "--provider-accent-soft": `${accent}20`,
@@ -194,7 +220,7 @@ function ProviderCard({
               <div className="provider-name">{provider.name}</div>
               {provider.plan && <div className="provider-plan">{provider.plan}</div>}
             </div>
-            <div className="provider-caption">{providerStateLabel}</div>
+            <div className="provider-caption">{providerCaption}</div>
           </div>
         </div>
         <button
@@ -237,6 +263,9 @@ function ProviderCard({
                 return null;
             }
           })}
+          {sharedResetLabel && (
+            <div className="provider-reset-note">Usage resets {sharedResetLabel.toLowerCase()}</div>
+          )}
         </div>
       )}
     </div>

@@ -116,6 +116,15 @@ fn fetch_usage(access_token: &str, account_id: Option<&str>) -> Result<(serde_js
     Ok((body, headers))
 }
 
+fn extract_reset_at(value: Option<&serde_json::Value>) -> Option<String> {
+    value.and_then(|v| {
+        v.as_i64()
+            .map(|n| n.to_string())
+            .or_else(|| v.as_u64().map(|n| n.to_string()))
+            .or_else(|| v.as_str().map(|s| s.to_string()))
+    })
+}
+
 pub fn probe() -> Result<(Option<String>, Vec<MetricLine>), String> {
     let auth = load_auth()?;
 
@@ -164,12 +173,17 @@ pub fn probe() -> Result<(Option<String>, Vec<MetricLine>), String> {
         });
 
     if let Some(pct) = session_pct {
+        let resets_at = extract_reset_at(
+            data.get("rate_limit")
+                .and_then(|rl| rl.get("primary_window"))
+                .and_then(|pw| pw.get("reset_at"))
+        );
         lines.push(MetricLine::Progress {
             label: "Session".into(),
             used: pct,
             limit: 100.0,
             format: MetricFormat { kind: "percent".into(), suffix: None },
-            resets_at: None,
+            resets_at,
         });
     }
 
@@ -184,12 +198,17 @@ pub fn probe() -> Result<(Option<String>, Vec<MetricLine>), String> {
         });
 
     if let Some(pct) = weekly_pct {
+        let resets_at = extract_reset_at(
+            data.get("rate_limit")
+                .and_then(|rl| rl.get("secondary_window"))
+                .and_then(|sw| sw.get("reset_at"))
+        );
         lines.push(MetricLine::Progress {
             label: "Weekly".into(),
             used: pct,
             limit: 100.0,
             format: MetricFormat { kind: "percent".into(), suffix: None },
-            resets_at: None,
+            resets_at,
         });
     }
 

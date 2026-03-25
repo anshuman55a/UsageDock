@@ -1,6 +1,12 @@
 use super::{MetricLine, MetricFormat};
+use std::process::Command;
+
+#[cfg(target_os = "windows")]
+use std::os::windows::process::CommandExt;
 
 const USAGE_URL: &str = "https://api.github.com/copilot_internal/user";
+#[cfg(target_os = "windows")]
+const CREATE_NO_WINDOW: u32 = 0x08000000;
 
 /// Get GitHub CLI hosts.yml path
 fn get_gh_hosts_path() -> Option<std::path::PathBuf> {
@@ -13,33 +19,76 @@ fn get_gh_hosts_path() -> Option<std::path::PathBuf> {
     }
 }
 
-fn load_token() -> Result<String, String> {
-    let hosts_path = get_gh_hosts_path()
-        .ok_or("Cannot determine GitHub CLI config path")?;
+fn get_gh_executable_path() -> std::path::PathBuf {
+    #[cfg(target_os = "windows")]
+    {
+        let candidates = [
+            std::path::PathBuf::from(r"C:\Program Files\GitHub CLI\gh.exe"),
+            std::path::PathBuf::from(r"C:\Program Files (x86)\GitHub CLI\gh.exe"),
+            std::env::var_os("LOCALAPPDATA")
+                .map(std::path::PathBuf::from)
+                .map(|p| p.join("Programs").join("GitHub CLI").join("gh.exe"))
+                .unwrap_or_default(),
+        ];
 
-    if !hosts_path.exists() {
-        return Err("Not logged in. Run `gh auth login` first.".into());
-    }
-
-    let content = std::fs::read_to_string(&hosts_path)
-        .map_err(|e| format!("Failed to read gh config: {}", e))?;
-
-    // Simple YAML parsing for hosts.yml
-    // Format:
-    // github.com:
-    //     oauth_token: gho_xxxx
-    //     user: username
-    for line in content.lines() {
-        let trimmed = line.trim();
-        if trimmed.starts_with("oauth_token:") {
-            let token = trimmed.strip_prefix("oauth_token:").unwrap().trim();
-            if !token.is_empty() {
-                return Ok(token.to_string());
+        for candidate in candidates {
+            if !candidate.as_os_str().is_empty() && candidate.exists() {
+                return candidate;
             }
         }
     }
 
-    Err("No GitHub token found. Run `gh auth login` first.".into())
+    std::path::PathBuf::from("gh")
+}
+
+fn load_token() -> Result<String, String> {
+    let hosts_path = get_gh_hosts_path()
+        .ok_or("Cannot determine GitHub CLI config path")?;
+
+    if hosts_path.exists() {
+        let content = std::fs::read_to_string(&hosts_path)
+            .map_err(|e| format!("Failed to read gh config: {}", e))?;
+
+        // Older gh stores oauth_token directly in hosts.yml.
+        for line in content.lines() {
+            let trimmed = line.trim();
+            if trimmed.starts_with("oauth_token:") {
+                let token = trimmed.strip_prefix("oauth_token:").unwrap().trim();
+                if !token.is_empty() {
+                    return Ok(token.to_string());
+                }
+            }
+        }
+    }
+
+    load_token_from_gh_cli()
+}
+
+fn load_token_from_gh_cli() -> Result<String, String> {
+    let mut command = Command::new(get_gh_executable_path());
+    command.args(["auth", "token", "--hostname", "github.com"]);
+
+    #[cfg(target_os = "windows")]
+    command.creation_flags(CREATE_NO_WINDOW);
+
+    let output = command.output().map_err(|_| {
+        "No GitHub token found. Install GitHub CLI and run `gh auth login` first.".to_string()
+    })?;
+
+    if !output.status.success() {
+        return Err("No GitHub token found. Run `gh auth login` first.".into());
+    }
+
+    let token = String::from_utf8(output.stdout)
+        .map_err(|e| format!("Invalid gh auth token output: {}", e))?
+        .trim()
+        .to_string();
+
+    if token.is_empty() {
+        return Err("No GitHub token found. Run `gh auth login` first.".into());
+    }
+
+    Ok(token)
 }
 
 fn fetch_usage(token: &str) -> Result<serde_json::Value, String> {

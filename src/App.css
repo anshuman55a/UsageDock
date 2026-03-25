@@ -475,6 +475,15 @@ body {
   padding: 0 14px 14px;
 }
 
+.provider-reset-note {
+  padding-top: 8px;
+  border-top: 1px solid rgba(148, 163, 184, 0.08);
+  color: var(--color-text-muted);
+  font-size: 10px;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
 .progress-metric {
   display: flex;
   flex-direction: column;

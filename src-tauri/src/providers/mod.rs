@@ -10,6 +10,7 @@ pub enum MetricLine {
         used: f64,
         limit: f64,
         format: MetricFormat,
+        #[serde(rename = "resetsAt")]
         #[serde(skip_serializing_if = "Option::is_none")]
         resets_at: Option<String>,
     },
