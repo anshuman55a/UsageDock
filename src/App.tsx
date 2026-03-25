@@ -126,18 +126,6 @@ function getSharedResetLabel(lines: MetricLine[]): string | null {
   return timeUntilReset(uniqueValues[0]);
 }
 
-function formatResetNote(resetLabel: string): string {
-  if (resetLabel === "resetting...") {
-    return "Resetting now";
-  }
-
-  if (resetLabel.startsWith("Resets in ")) {
-    return `Next reset in ${resetLabel.slice("Resets in ".length)}`;
-  }
-
-  return resetLabel;
-}
-
 // Progress Bar Component
 function ProgressMetric({ line }: { line: ProgressLine }) {
   const pct = line.limit > 0 ? Math.min((line.used / line.limit) * 100, 100) : 0;
@@ -202,16 +190,15 @@ function ProviderCard({
   const IconComponent = PROVIDER_ICONS[provider.id];
   const accent = provider.brandColor || style.bg;
   const sharedResetLabel = provider.error ? null : getSharedResetLabel(provider.lines);
-  const providerStateLabel = provider.error
+  const providerCaption = provider.error
     ? "Connection needs attention"
     : isRefreshing
       ? "Refreshing usage..."
-      : provider.lines.length > 0
-        ? `${provider.lines.length} live signal${provider.lines.length === 1 ? "" : "s"}`
-        : "Waiting for usage signals";
-  const providerCaption = sharedResetLabel
-    ? `${providerStateLabel} - ${sharedResetLabel}`
-    : providerStateLabel;
+      : sharedResetLabel
+        ? sharedResetLabel
+        : provider.lines.length === 0
+          ? "Waiting for usage signals"
+          : null;
   const providerCardStyle = {
     "--provider-accent": accent,
     "--provider-accent-soft": `${accent}20`,
@@ -232,7 +219,7 @@ function ProviderCard({
               <div className="provider-name">{provider.name}</div>
               {provider.plan && <div className="provider-plan">{provider.plan}</div>}
             </div>
-            <div className="provider-caption">{providerCaption}</div>
+            {providerCaption && <div className="provider-caption">{providerCaption}</div>}
           </div>
         </div>
         <button
@@ -275,9 +262,6 @@ function ProviderCard({
                 return null;
             }
           })}
-          {sharedResetLabel && (
-            <div className="provider-reset-note">{formatResetNote(sharedResetLabel)}</div>
-          )}
         </div>
       )}
     </div>
