@@ -2,15 +2,72 @@ mod providers;
 
 use std::time::Duration;
 
+use serde::Serialize;
+use reqwest::Url;
 use tauri::{
     Manager,
     menu::{Menu, MenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
 };
+use tauri_plugin_updater::UpdaterExt;
 
 use providers::{ProviderMeta, ProviderResult, list_providers, probe_provider};
 
 const BLUR_HIDE_DEBOUNCE_MS: u64 = 180;
+const UPDATER_PUBLIC_KEY: Option<&str> = option_env!("TAURI_UPDATER_PUBLIC_KEY");
+const UPDATER_ENDPOINTS: Option<&str> = option_env!("TAURI_UPDATER_ENDPOINT");
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct AppUpdateInfo {
+    version: String,
+    current_version: String,
+    notes: Option<String>,
+    published_at: Option<String>,
+}
+
+fn updater_enabled() -> bool {
+    matches!(UPDATER_PUBLIC_KEY, Some(value) if !value.trim().is_empty())
+        && matches!(UPDATER_ENDPOINTS, Some(value) if !value.trim().is_empty())
+}
+
+fn updater_urls() -> Result<Vec<Url>, String> {
+    let raw = UPDATER_ENDPOINTS.ok_or_else(|| "Updater endpoint is not configured.".to_string())?;
+    let urls = raw
+        .split(',')
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(|value| Url::parse(value).map_err(|error| format!("Invalid updater endpoint '{value}': {error}")))
+        .collect::<Result<Vec<_>, _>>()?;
+
+    if urls.is_empty() {
+        return Err("Updater endpoint is not configured.".into());
+    }
+
+    Ok(urls)
+}
+
+fn build_updater(app: &tauri::AppHandle) -> Result<tauri_plugin_updater::Updater, String> {
+    if !updater_enabled() {
+        return Err("Updater is not configured for this build.".into());
+    }
+
+    let pubkey = UPDATER_PUBLIC_KEY
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| "Updater public key is missing.".to_string())?;
+
+    let updater_builder = app
+        .updater_builder()
+        .pubkey(pubkey)
+        .timeout(Duration::from_secs(20))
+        .endpoints(updater_urls()?)
+        .map_err(|error| format!("Failed to configure updater endpoints: {error}"))?;
+
+    updater_builder
+        .build()
+        .map_err(|error| format!("Failed to build updater client: {error}"))
+}
 
 #[tauri::command]
 fn get_providers() -> Vec<ProviderMeta> {
@@ -56,6 +113,41 @@ async fn probe_all() -> Vec<ProviderResult> {
     }
 
     results
+}
+
+#[tauri::command]
+fn updater_enabled_command() -> bool {
+    updater_enabled()
+}
+
+#[tauri::command]
+async fn check_for_app_update(app: tauri::AppHandle) -> Result<Option<AppUpdateInfo>, String> {
+    let update = build_updater(&app)?.check().await.map_err(|error| {
+        format!("Failed to check for updates: {error}")
+    })?;
+
+    Ok(update.map(|update| AppUpdateInfo {
+        version: update.version,
+        current_version: update.current_version,
+        notes: update.body,
+        published_at: update.date.map(|value| value.to_string()),
+    }))
+}
+
+#[tauri::command]
+async fn install_app_update(app: tauri::AppHandle) -> Result<(), String> {
+    let update = build_updater(&app)?
+        .check()
+        .await
+        .map_err(|error| format!("Failed to check for updates: {error}"))?
+        .ok_or_else(|| "No update is currently available.".to_string())?;
+
+    update
+        .download_and_install(|_, _| {}, || {})
+        .await
+        .map_err(|error| format!("Failed to install update: {error}"))?;
+
+    Ok(())
 }
 
 fn toggle_panel(app: &tauri::AppHandle) {
@@ -117,6 +209,7 @@ fn hide_window_if_still_blurred(window: tauri::WebviewWindow) {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             if let Some(window) = app.get_webview_window("main") {
                 show_panel(app, &window);
@@ -170,7 +263,14 @@ pub fn run() {
 
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![get_providers, probe, probe_all])
+        .invoke_handler(tauri::generate_handler![
+            get_providers,
+            probe,
+            probe_all,
+            updater_enabled_command,
+            check_for_app_update,
+            install_app_update
+        ])
         .run(tauri::generate_context!())
         .expect("Error while running UsageDock");
 }
