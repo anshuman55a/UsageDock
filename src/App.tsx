@@ -126,6 +126,18 @@ function getSharedResetLabel(lines: MetricLine[]): string | null {
   return timeUntilReset(uniqueValues[0]);
 }
 
+function formatResetNote(resetLabel: string): string {
+  if (resetLabel === "resetting...") {
+    return "Resetting now";
+  }
+
+  if (resetLabel.startsWith("Resets in ")) {
+    return `Next reset in ${resetLabel.slice("Resets in ".length)}`;
+  }
+
+  return resetLabel;
+}
+
 // Progress Bar Component
 function ProgressMetric({ line }: { line: ProgressLine }) {
   const pct = line.limit > 0 ? Math.min((line.used / line.limit) * 100, 100) : 0;
@@ -264,7 +276,7 @@ function ProviderCard({
             }
           })}
           {sharedResetLabel && (
-            <div className="provider-reset-note">Usage resets {sharedResetLabel.toLowerCase()}</div>
+            <div className="provider-reset-note">{formatResetNote(sharedResetLabel)}</div>
           )}
         </div>
       )}
