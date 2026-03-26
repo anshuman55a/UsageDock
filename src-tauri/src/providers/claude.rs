@@ -1,4 +1,4 @@
-use super::{MetricLine, MetricFormat};
+use super::{MetricFormat, MetricLine};
 
 const CRED_FILE: &str = ".claude/.credentials.json";
 const USAGE_URL: &str = "https://api.anthropic.com/api/oauth/usage";
@@ -6,24 +6,21 @@ const REFRESH_URL: &str = "https://platform.claude.com/v1/oauth/token";
 const CLIENT_ID: &str = "9d1c250a-e61b-44d9-88ed-5944d1962f5e";
 
 fn get_credentials_path() -> Option<String> {
-    dirs::home_dir().map(|h| {
-        h.join(CRED_FILE).to_string_lossy().to_string()
-    })
+    dirs::home_dir().map(|h| h.join(CRED_FILE).to_string_lossy().to_string())
 }
 
 fn load_credentials() -> Result<serde_json::Value, String> {
-    let path = get_credentials_path()
-        .ok_or("Cannot determine home directory")?;
+    let path = get_credentials_path().ok_or("Cannot determine home directory")?;
 
     if !std::path::Path::new(&path).exists() {
         return Err("Not logged in. Run `claude` to authenticate.".into());
     }
 
-    let content = std::fs::read_to_string(&path)
-        .map_err(|e| format!("Failed to read credentials: {}", e))?;
+    let content =
+        std::fs::read_to_string(&path).map_err(|e| format!("Failed to read credentials: {}", e))?;
 
-    let data: serde_json::Value = serde_json::from_str(&content)
-        .map_err(|e| format!("Invalid credentials file: {}", e))?;
+    let data: serde_json::Value =
+        serde_json::from_str(&content).map_err(|e| format!("Invalid credentials file: {}", e))?;
 
     Ok(data)
 }
@@ -51,7 +48,9 @@ fn refresh_token(refresh_tok: &str) -> Result<String, String> {
         return Err(format!("Token refresh failed (HTTP {})", status));
     }
 
-    let body: serde_json::Value = resp.json().map_err(|e| format!("Invalid response: {}", e))?;
+    let body: serde_json::Value = resp
+        .json()
+        .map_err(|e| format!("Invalid response: {}", e))?;
     body.get("access_token")
         .and_then(|v| v.as_str())
         .map(|s| s.to_string())
@@ -86,10 +85,12 @@ fn fetch_usage(access_token: &str) -> Result<serde_json::Value, String> {
 pub fn probe() -> Result<(Option<String>, Vec<MetricLine>), String> {
     let creds = load_credentials()?;
 
-    let oauth = creds.get("claudeAiOauth")
+    let oauth = creds
+        .get("claudeAiOauth")
         .ok_or("No OAuth credentials found. Run `claude` to authenticate.")?;
 
-    let access_token = oauth.get("accessToken")
+    let access_token = oauth
+        .get("accessToken")
         .and_then(|v| v.as_str())
         .ok_or("No access token found")?;
 
@@ -98,7 +99,8 @@ pub fn probe() -> Result<(Option<String>, Vec<MetricLine>), String> {
     }
 
     // Check if token needs refresh
-    let needs_refresh = oauth.get("expiresAt")
+    let needs_refresh = oauth
+        .get("expiresAt")
         .and_then(|v| v.as_i64())
         .map(|exp| {
             let now_ms = std::time::SystemTime::now()
@@ -124,7 +126,8 @@ pub fn probe() -> Result<(Option<String>, Vec<MetricLine>), String> {
 
     let data = fetch_usage(&token)?;
 
-    let plan = oauth.get("subscriptionType")
+    let plan = oauth
+        .get("subscriptionType")
         .and_then(|v| v.as_str())
         .map(capitalize);
 
@@ -133,14 +136,18 @@ pub fn probe() -> Result<(Option<String>, Vec<MetricLine>), String> {
     // Session (5-hour window)
     if let Some(five_hour) = data.get("five_hour") {
         if let Some(util) = five_hour.get("utilization").and_then(|v| v.as_f64()) {
-            let resets_at = five_hour.get("resets_at")
+            let resets_at = five_hour
+                .get("resets_at")
                 .and_then(|v| v.as_str())
                 .map(|s| s.to_string());
             lines.push(MetricLine::Progress {
                 label: "Session".into(),
                 used: util,
                 limit: 100.0,
-                format: MetricFormat { kind: "percent".into(), suffix: None },
+                format: MetricFormat {
+                    kind: "percent".into(),
+                    suffix: None,
+                },
                 resets_at,
             });
         }
@@ -149,14 +156,18 @@ pub fn probe() -> Result<(Option<String>, Vec<MetricLine>), String> {
     // Weekly (7-day window)
     if let Some(seven_day) = data.get("seven_day") {
         if let Some(util) = seven_day.get("utilization").and_then(|v| v.as_f64()) {
-            let resets_at = seven_day.get("resets_at")
+            let resets_at = seven_day
+                .get("resets_at")
                 .and_then(|v| v.as_str())
                 .map(|s| s.to_string());
             lines.push(MetricLine::Progress {
                 label: "Weekly".into(),
                 used: util,
                 limit: 100.0,
-                format: MetricFormat { kind: "percent".into(), suffix: None },
+                format: MetricFormat {
+                    kind: "percent".into(),
+                    suffix: None,
+                },
                 resets_at,
             });
         }
@@ -165,14 +176,23 @@ pub fn probe() -> Result<(Option<String>, Vec<MetricLine>), String> {
     // Extra usage
     if let Some(extra) = data.get("extra_usage") {
         if extra.get("is_enabled").and_then(|v| v.as_bool()) == Some(true) {
-            let used = extra.get("used_credits").and_then(|v| v.as_f64()).unwrap_or(0.0);
-            let limit = extra.get("monthly_limit").and_then(|v| v.as_f64()).unwrap_or(0.0);
+            let used = extra
+                .get("used_credits")
+                .and_then(|v| v.as_f64())
+                .unwrap_or(0.0);
+            let limit = extra
+                .get("monthly_limit")
+                .and_then(|v| v.as_f64())
+                .unwrap_or(0.0);
             if limit > 0.0 {
                 lines.push(MetricLine::Progress {
                     label: "Extra usage".into(),
                     used: used / 100.0,
                     limit: limit / 100.0,
-                    format: MetricFormat { kind: "dollars".into(), suffix: None },
+                    format: MetricFormat {
+                        kind: "dollars".into(),
+                        suffix: None,
+                    },
                     resets_at: None,
                 });
             }

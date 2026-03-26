@@ -2,16 +2,16 @@ mod providers;
 
 use std::time::Duration;
 
-use serde::Serialize;
 use reqwest::Url;
+use serde::Serialize;
 use tauri::{
-    Manager,
     menu::{Menu, MenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
+    Manager,
 };
 use tauri_plugin_updater::UpdaterExt;
 
-use providers::{ProviderMeta, ProviderResult, list_providers, probe_provider};
+use providers::{list_providers, probe_provider, ProviderResult};
 
 const BLUR_HIDE_DEBOUNCE_MS: u64 = 180;
 const UPDATER_PUBLIC_KEY: Option<&str> = option_env!("TAURI_UPDATER_PUBLIC_KEY");
@@ -37,7 +37,10 @@ fn updater_urls() -> Result<Vec<Url>, String> {
         .split(',')
         .map(str::trim)
         .filter(|value| !value.is_empty())
-        .map(|value| Url::parse(value).map_err(|error| format!("Invalid updater endpoint '{value}': {error}")))
+        .map(|value| {
+            Url::parse(value)
+                .map_err(|error| format!("Invalid updater endpoint '{value}': {error}"))
+        })
         .collect::<Result<Vec<_>, _>>()?;
 
     if urls.is_empty() {
@@ -67,11 +70,6 @@ fn build_updater(app: &tauri::AppHandle) -> Result<tauri_plugin_updater::Updater
     updater_builder
         .build()
         .map_err(|error| format!("Failed to build updater client: {error}"))
-}
-
-#[tauri::command]
-fn get_providers() -> Vec<ProviderMeta> {
-    list_providers()
 }
 
 #[tauri::command]
@@ -122,9 +120,10 @@ fn updater_enabled_command() -> bool {
 
 #[tauri::command]
 async fn check_for_app_update(app: tauri::AppHandle) -> Result<Option<AppUpdateInfo>, String> {
-    let update = build_updater(&app)?.check().await.map_err(|error| {
-        format!("Failed to check for updates: {error}")
-    })?;
+    let update = build_updater(&app)?
+        .check()
+        .await
+        .map_err(|error| format!("Failed to check for updates: {error}"))?;
 
     Ok(update.map(|update| AppUpdateInfo {
         version: update.version,
@@ -186,10 +185,7 @@ fn position_window_near_tray(_app: &tauri::AppHandle, window: &tauri::WebviewWin
         let x = monitor_pos.x + monitor_size.width as i32 - win_width - margin;
         let y = monitor_pos.y + monitor_size.height as i32 - win_height - taskbar_height;
 
-        let _ = window.set_position(tauri::Position::Physical(tauri::PhysicalPosition {
-            x,
-            y,
-        }));
+        let _ = window.set_position(tauri::Position::Physical(tauri::PhysicalPosition { x, y }));
     }
 }
 
@@ -215,7 +211,6 @@ pub fn run() {
                 show_panel(app, &window);
             }
         }))
-        .plugin(tauri_plugin_opener::init())
         .setup(|app| {
             // Build context menu
             let show_i = MenuItem::with_id(app, "show", "Show UsageDock", true, None::<&str>)?;
@@ -264,7 +259,6 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
-            get_providers,
             probe,
             probe_all,
             updater_enabled_command,

@@ -15,10 +15,7 @@ pub enum MetricLine {
         resets_at: Option<String>,
     },
     #[serde(rename = "text")]
-    Text {
-        label: String,
-        value: String,
-    },
+    Text { label: String, value: String },
     #[serde(rename = "badge")]
     Badge {
         label: String,
@@ -61,10 +58,10 @@ pub struct ProviderMeta {
     pub brand_color: String,
 }
 
-pub mod cursor;
 pub mod claude;
-pub mod copilot;
 pub mod codex;
+pub mod copilot;
+pub mod cursor;
 pub mod windsurf;
 
 /// Get metadata for all supported providers
@@ -110,15 +107,17 @@ pub fn probe_provider(id: &str) -> ProviderResult {
 
     let (name, icon, brand_color) = match provider_meta {
         Some(m) => (m.name.clone(), m.icon.clone(), m.brand_color.clone()),
-        None => return ProviderResult {
-            id: id.to_string(),
-            name: id.to_string(),
-            icon: String::new(),
-            brand_color: "#666".into(),
-            plan: None,
-            lines: vec![],
-            error: Some(format!("Unknown provider: {}", id)),
-        },
+        None => {
+            return ProviderResult {
+                id: id.to_string(),
+                name: id.to_string(),
+                icon: String::new(),
+                brand_color: "#666".into(),
+                plan: None,
+                lines: vec![],
+                error: Some(format!("Unknown provider: {}", id)),
+            }
+        }
     };
 
     let result = match id {
