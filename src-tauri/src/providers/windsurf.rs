@@ -71,6 +71,49 @@ struct LocalLsDiscovery {
     version: String,
 }
 
+#[cfg(target_os = "linux")]
+fn get_ps_executable_path() -> std::path::PathBuf {
+    for candidate in ["/usr/bin/ps", "/bin/ps"] {
+        let path = std::path::PathBuf::from(candidate);
+        if path.exists() {
+            return path;
+        }
+    }
+
+    std::path::PathBuf::from("ps")
+}
+
+#[cfg(target_os = "windows")]
+fn get_powershell_executable_path() -> std::path::PathBuf {
+    let mut candidates = Vec::new();
+
+    for env_key in ["WINDIR", "SystemRoot"] {
+        if let Some(root) = std::env::var_os(env_key) {
+            let base = std::path::PathBuf::from(root);
+            candidates.push(
+                base.join("System32")
+                    .join("WindowsPowerShell")
+                    .join("v1.0")
+                    .join("powershell.exe"),
+            );
+            candidates.push(
+                base.join("Sysnative")
+                    .join("WindowsPowerShell")
+                    .join("v1.0")
+                    .join("powershell.exe"),
+            );
+        }
+    }
+
+    for candidate in candidates {
+        if candidate.exists() {
+            return candidate;
+        }
+    }
+
+    std::path::PathBuf::from("powershell.exe")
+}
+
 fn extract_flag(command: &str, flag: &str) -> Option<String> {
     let parts: Vec<&str> = command.split_whitespace().collect();
     let flag_eq = format!("{}=", flag);
@@ -98,7 +141,10 @@ fn discover_ls(variant_marker: &str) -> Option<LocalLsDiscovery> {
 
     #[cfg(target_os = "linux")]
     {
-        let output = match std::process::Command::new("ps").args(["aux"]).output() {
+        let output = match std::process::Command::new(get_ps_executable_path())
+            .args(["aux"])
+            .output()
+        {
             Ok(output) => output,
             Err(_) => return None,
         };
@@ -179,7 +225,7 @@ fn parse_ls_args(text: &str) -> Option<(u16, String)> {
 
 #[cfg(target_os = "windows")]
 fn run_hidden_powershell(script: &str) -> Option<String> {
-    let output = std::process::Command::new("powershell.exe")
+    let output = std::process::Command::new(get_powershell_executable_path())
         .creation_flags(CREATE_NO_WINDOW)
         .args([
             "-NoProfile",
