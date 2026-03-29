@@ -9,6 +9,11 @@ jobs:
   publish-tauri:
     permissions:
       contents: write
+    env:
+      TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+      TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+      TAURI_UPDATER_PUBLIC_KEY: ${{ secrets.TAURI_UPDATER_PUBLIC_KEY }}
+      TAURI_UPDATER_ENDPOINT: https://github.com/anshuman55a/UsageDock/releases/latest/download/latest.json
     strategy:
       fail-fast: false
       matrix:
@@ -39,7 +44,26 @@ jobs:
       - name: install frontend dependencies
         run: npm install
 
+      - name: enable updater artifacts
+        if: env.TAURI_SIGNING_PRIVATE_KEY != '' && env.TAURI_UPDATER_PUBLIC_KEY != ''
+        run: |
+          node -e "const fs = require('fs'); const config = { bundle: { createUpdaterArtifacts: true }, plugins: { updater: { pubkey: process.env.TAURI_UPDATER_PUBLIC_KEY, endpoints: [process.env.TAURI_UPDATER_ENDPOINT], windows: { installMode: 'passive' } } } }; fs.writeFileSync('src-tauri/tauri.updater.conf.json', JSON.stringify(config, null, 2));"
+
       - uses: tauri-apps/tauri-action@v0
+        if: env.TAURI_SIGNING_PRIVATE_KEY != '' && env.TAURI_UPDATER_PUBLIC_KEY != ''
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: v__VERSION__ # the action automatically replaces \_\_VERSION\_\_ with the app version
+          releaseName: 'UsageDock v__VERSION__'
+          releaseBody: 'Download the UsageDock installers from the assets below.'
+          releaseDraft: false
+          prerelease: false
+          includeUpdaterJson: true
+          args: ${{ matrix.platform == 'windows-latest' && '--config src-tauri/tauri.updater.conf.json --bundles nsis' || '--config src-tauri/tauri.updater.conf.json --bundles deb,rpm,appimage' }}
+
+      - uses: tauri-apps/tauri-action@v0
+        if: env.TAURI_SIGNING_PRIVATE_KEY == '' || env.TAURI_UPDATER_PUBLIC_KEY == ''
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:

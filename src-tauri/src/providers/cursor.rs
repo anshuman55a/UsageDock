@@ -1,4 +1,4 @@
-use super::{MetricLine, MetricFormat};
+use super::{MetricFormat, MetricLine};
 
 /// Cursor credential and API paths
 fn get_state_db_path() -> Option<String> {
@@ -38,13 +38,12 @@ fn read_db_value(db_path: &str, key: &str) -> Option<String> {
     let conn = rusqlite::Connection::open_with_flags(
         db_path,
         rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY | rusqlite::OpenFlags::SQLITE_OPEN_NO_MUTEX,
-    ).ok()?;
+    )
+    .ok()?;
 
     let sql = format!("SELECT value FROM ItemTable WHERE key = '{}' LIMIT 1", key);
     let mut stmt = conn.prepare(&sql).ok()?;
-    let result: Option<String> = stmt
-        .query_row([], |row| row.get(0))
-        .ok();
+    let result: Option<String> = stmt.query_row([], |row| row.get(0)).ok();
     result
 }
 
@@ -70,7 +69,9 @@ fn refresh_token(refresh_token_value: &str) -> Result<String, String> {
         return Err(format!("Refresh failed (HTTP {})", status));
     }
 
-    let body: serde_json::Value = resp.json().map_err(|e| format!("Invalid response: {}", e))?;
+    let body: serde_json::Value = resp
+        .json()
+        .map_err(|e| format!("Invalid response: {}", e))?;
 
     if body.get("shouldLogout").and_then(|v| v.as_bool()) == Some(true) {
         return Err("Session expired. Sign in via Cursor app.".into());
@@ -111,8 +112,7 @@ fn cents_to_dollars(cents: f64) -> f64 {
 }
 
 pub fn probe() -> Result<(Option<String>, Vec<MetricLine>), String> {
-    let db_path = get_state_db_path()
-        .ok_or("Cannot determine Cursor data path")?;
+    let db_path = get_state_db_path().ok_or("Cannot determine Cursor data path")?;
 
     if !std::path::Path::new(&db_path).exists() {
         return Err("Cursor not installed or not signed in.".into());
@@ -123,26 +123,25 @@ pub fn probe() -> Result<(Option<String>, Vec<MetricLine>), String> {
 
     let token = match (access_token, refresh_tok) {
         (Some(at), _) if !at.is_empty() => at,
-        (_, Some(rt)) if !rt.is_empty() => {
-            refresh_token(&rt)?
-        }
+        (_, Some(rt)) if !rt.is_empty() => refresh_token(&rt)?,
         _ => return Err("Not logged in. Sign in via Cursor app.".into()),
     };
 
     // Fetch usage
-    let usage_url = format!("{}/aiserver.v1.DashboardService/GetCurrentPeriodUsage", BASE_URL);
+    let usage_url = format!(
+        "{}/aiserver.v1.DashboardService/GetCurrentPeriodUsage",
+        BASE_URL
+    );
     let usage = connect_post(&usage_url, &token)?;
 
     // Fetch plan info
     let plan_url = format!("{}/aiserver.v1.DashboardService/GetPlanInfo", BASE_URL);
-    let plan_name = connect_post(&plan_url, &token)
-        .ok()
-        .and_then(|v| {
-            v.get("planInfo")
-                .and_then(|pi| pi.get("planName"))
-                .and_then(|n| n.as_str())
-                .map(|s| s.to_string())
-        });
+    let plan_name = connect_post(&plan_url, &token).ok().and_then(|v| {
+        v.get("planInfo")
+            .and_then(|pi| pi.get("planName"))
+            .and_then(|n| n.as_str())
+            .map(|s| s.to_string())
+    });
 
     let plan_label = plan_name.as_deref().map(capitalize);
 
@@ -162,24 +161,31 @@ pub fn probe() -> Result<(Option<String>, Vec<MetricLine>), String> {
             let remaining = pu.get("remaining").and_then(|v| v.as_f64());
             let used = total_spend.unwrap_or_else(|| limit - remaining.unwrap_or(0.0));
 
-            let resets_at = usage.get("billingCycleEnd")
+            let resets_at = usage
+                .get("billingCycleEnd")
                 .and_then(|v| v.as_str().or_else(|| v.as_f64().map(|_| "")))
                 .and_then(|_| {
-                    usage.get("billingCycleEnd")
-                        .and_then(|v| {
-                            let ms = if let Some(s) = v.as_str() { s.parse::<i64>().ok() } else { v.as_i64() };
-                            ms.map(|m| {
-                                let dt = chrono_lite_ms_to_iso(m);
-                                dt
-                            })
+                    usage.get("billingCycleEnd").and_then(|v| {
+                        let ms = if let Some(s) = v.as_str() {
+                            s.parse::<i64>().ok()
+                        } else {
+                            v.as_i64()
+                        };
+                        ms.map(|m| {
+                            let dt = chrono_lite_ms_to_iso(m);
+                            dt
                         })
+                    })
                 });
 
             lines.push(MetricLine::Progress {
                 label: "Plan usage".into(),
                 used: cents_to_dollars(used),
                 limit: cents_to_dollars(limit),
-                format: MetricFormat { kind: "dollars".into(), suffix: None },
+                format: MetricFormat {
+                    kind: "dollars".into(),
+                    suffix: None,
+                },
                 resets_at,
             });
         }
@@ -187,11 +193,13 @@ pub fn probe() -> Result<(Option<String>, Vec<MetricLine>), String> {
 
     // On-demand spend limit
     if let Some(su) = usage.get("spendLimitUsage") {
-        let limit = su.get("individualLimit")
+        let limit = su
+            .get("individualLimit")
             .or_else(|| su.get("pooledLimit"))
             .and_then(|v| v.as_f64())
             .unwrap_or(0.0);
-        let remaining = su.get("individualRemaining")
+        let remaining = su
+            .get("individualRemaining")
             .or_else(|| su.get("pooledRemaining"))
             .and_then(|v| v.as_f64())
             .unwrap_or(0.0);
@@ -202,7 +210,10 @@ pub fn probe() -> Result<(Option<String>, Vec<MetricLine>), String> {
                 label: "On-demand".into(),
                 used: cents_to_dollars(used),
                 limit: cents_to_dollars(limit),
-                format: MetricFormat { kind: "dollars".into(), suffix: None },
+                format: MetricFormat {
+                    kind: "dollars".into(),
+                    suffix: None,
+                },
                 resets_at: None,
             });
         }
@@ -243,7 +254,10 @@ fn chrono_lite_ms_to_iso(ms: i64) -> String {
 
     // Simple date calculation from days since epoch
     let (year, month, day) = days_to_ymd(days as i64);
-    format!("{:04}-{:02}-{:02}T{:02}:{:02}:{:02}Z", year, month, day, hours, minutes, seconds)
+    format!(
+        "{:04}-{:02}-{:02}T{:02}:{:02}:{:02}Z",
+        year, month, day, hours, minutes, seconds
+    )
 }
 
 fn days_to_ymd(days: i64) -> (i64, i64, i64) {
