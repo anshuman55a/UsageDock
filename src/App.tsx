@@ -48,6 +48,13 @@ interface ProviderResult {
   error?: string | null;
 }
 
+interface AppUpdateInfo {
+  version: string;
+  currentVersion: string;
+  notes?: string | null;
+  publishedAt?: string | null;
+}
+
 // Provider brand colors
 const PROVIDER_STYLES: Record<string, { bg: string }> = {
   cursor: { bg: "#000000" },
@@ -107,6 +114,23 @@ function timeUntilReset(isoStr: string): string {
   const mins = Math.floor((diffMs % 3600000) / 60000);
   if (hours > 0) return `Resets in ${hours}h ${mins}m`;
   return `Resets in ${mins}m`;
+}
+
+function getErrorMessage(error: unknown, fallback: string): string {
+  if (typeof error === "string" && error.trim()) return error;
+  if (error instanceof Error && error.message.trim()) return error.message;
+  return fallback;
+}
+
+function summarizeUpdateNotes(notes?: string | null): string | null {
+  if (!notes) return null;
+  const firstLine = notes
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .find(Boolean);
+
+  if (!firstLine) return null;
+  return firstLine.length > 92 ? `${firstLine.slice(0, 89)}...` : firstLine;
 }
 
 function getSharedResetLabel(lines: MetricLine[]): string | null {
@@ -275,6 +299,11 @@ function App() {
   const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [showUnavailable, setShowUnavailable] = useState(false);
+  const [updaterEnabled, setUpdaterEnabled] = useState(false);
+  const [updateInfo, setUpdateInfo] = useState<AppUpdateInfo | null>(null);
+  const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
+  const [isInstallingUpdate, setIsInstallingUpdate] = useState(false);
+  const [updateError, setUpdateError] = useState<string | null>(null);
   const [autoRefreshEnabled, setAutoRefreshEnabled] = useState(() => {
     if (typeof window === "undefined") return true;
     const stored = window.localStorage.getItem(AUTO_REFRESH_ENABLED_KEY);
@@ -330,9 +359,53 @@ function App() {
     }
   }, []);
 
+  const checkForUpdates = useCallback(async (showErrors = true) => {
+    setIsCheckingUpdate(true);
+    setUpdateError(null);
+
+    try {
+      const enabled = await invoke<boolean>("updater_enabled_command");
+      setUpdaterEnabled(enabled);
+
+      if (!enabled) {
+        setUpdateInfo(null);
+        return;
+      }
+
+      const availableUpdate = await invoke<AppUpdateInfo | null>("check_for_app_update");
+      setUpdateInfo(availableUpdate);
+    } catch (error) {
+      console.error("Failed to check for updates:", error);
+      setUpdateInfo(null);
+      if (showErrors) {
+        setUpdateError(getErrorMessage(error, "Could not check for updates right now."));
+      }
+    } finally {
+      setIsCheckingUpdate(false);
+    }
+  }, []);
+
+  const installUpdate = useCallback(async () => {
+    setIsInstallingUpdate(true);
+    setUpdateError(null);
+
+    try {
+      await invoke("install_app_update");
+    } catch (error) {
+      console.error("Failed to install update:", error);
+      setUpdateError(getErrorMessage(error, "Could not install the latest release."));
+    } finally {
+      setIsInstallingUpdate(false);
+    }
+  }, []);
+
   useEffect(() => {
     refreshAll();
   }, [refreshAll]);
+
+  useEffect(() => {
+    checkForUpdates(false);
+  }, [checkForUpdates]);
 
   useEffect(() => {
     window.localStorage.setItem(AUTO_REFRESH_ENABLED_KEY, String(autoRefreshEnabled));
@@ -385,6 +458,7 @@ function App() {
   const autoRefreshSummary = autoRefreshEnabled
     ? `Auto refresh every ${autoRefreshMinutes} min`
     : "Auto refresh off";
+  const updateSummary = summarizeUpdateNotes(updateInfo?.notes);
 
   return (
     <div className="app-shell">
@@ -415,6 +489,41 @@ function App() {
       </div>
 
       <div className="provider-list">
+        {updaterEnabled && (updateInfo || isInstallingUpdate || updateError) && (
+          <section
+            className={`update-banner ${
+              updateError ? "update-banner-error" : updateInfo ? "update-banner-ready" : ""
+            }`}
+          >
+            <div className="update-banner-copy">
+              <span className="update-banner-label">
+                {updateError
+                  ? "Updater needs attention"
+                  : isInstallingUpdate
+                    ? "Installing update"
+                    : `Version ${updateInfo?.version} is ready`}
+              </span>
+              <span className="update-banner-text">
+                {updateError
+                  ? updateError
+                  : isInstallingUpdate
+                    ? "UsageDock will close when the installer takes over."
+                    : updateSummary || "A newer UsageDock release is available for this device."}
+              </span>
+            </div>
+
+            {updateInfo && !isInstallingUpdate && !updateError && (
+              <button
+                type="button"
+                className="update-banner-button"
+                onClick={installUpdate}
+              >
+                Install
+              </button>
+            )}
+          </section>
+        )}
+
         {availableProviders.map((provider) => (
           <ProviderCard
             key={provider.id}
@@ -473,7 +582,19 @@ function App() {
               ? `Updated ${lastRefresh.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`
               : "Loading provider activity"}
           </span>
-          <span className="footer-text">{autoRefreshSummary}</span>
+          <div className="footer-meta-actions">
+            {updaterEnabled && (
+              <button
+                type="button"
+                className="footer-link-button"
+                onClick={() => checkForUpdates(true)}
+                disabled={isCheckingUpdate || isInstallingUpdate}
+              >
+                {isCheckingUpdate ? "Checking updates" : "Check updates"}
+              </button>
+            )}
+            <span className="footer-text">{autoRefreshSummary}</span>
+          </div>
         </div>
         <div className="footer-row footer-controls">
           <label className="toggle-field">

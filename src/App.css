@@ -235,6 +235,81 @@ body {
   padding: 12px 10px 14px;
 }
 
+.update-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0 0 10px;
+  padding: 11px 12px;
+  border: 1px solid rgba(148, 163, 184, 0.12);
+  border-radius: 14px;
+  background:
+    linear-gradient(180deg, rgba(17, 25, 35, 0.8), rgba(11, 18, 26, 0.88));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+}
+
+.update-banner-ready {
+  border-color: rgba(207, 135, 80, 0.18);
+}
+
+.update-banner-error {
+  border-color: rgba(222, 106, 95, 0.18);
+  background:
+    linear-gradient(180deg, rgba(42, 23, 24, 0.74), rgba(28, 18, 21, 0.82));
+}
+
+.update-banner-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.update-banner-label {
+  color: var(--color-text-primary);
+  font-size: 11px;
+  font-weight: 620;
+  letter-spacing: -0.01em;
+}
+
+.update-banner-text {
+  color: var(--color-text-secondary);
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.update-banner-error .update-banner-text {
+  color: #efbbb5;
+}
+
+.update-banner-button {
+  flex-shrink: 0;
+  min-width: 64px;
+  height: 28px;
+  padding: 0 12px;
+  border: 1px solid rgba(207, 135, 80, 0.22);
+  border-radius: 10px;
+  background:
+    linear-gradient(180deg, rgba(220, 150, 95, 0.28), rgba(168, 99, 55, 0.22));
+  color: var(--color-text-primary);
+  cursor: pointer;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 620;
+  transition:
+    border-color 0.18s ease,
+    background 0.18s ease,
+    transform 0.18s ease;
+}
+
+.update-banner-button:hover {
+  border-color: rgba(207, 135, 80, 0.34);
+  background:
+    linear-gradient(180deg, rgba(220, 150, 95, 0.34), rgba(168, 99, 55, 0.28));
+  transform: translateY(-1px);
+}
+
 .provider-collapse {
   margin-top: 2px;
   border: 1px solid rgba(148, 163, 184, 0.1);
@@ -629,6 +704,33 @@ body {
   color: var(--color-text-muted);
   font-size: 10px;
   letter-spacing: 0.02em;
+}
+
+.footer-meta-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.footer-link-button {
+  border: none;
+  background: transparent;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  font: inherit;
+  font-size: 10px;
+  letter-spacing: 0.02em;
+  transition: color 0.18s ease;
+}
+
+.footer-link-button:hover:not(:disabled) {
+  color: var(--color-text-primary);
+}
+
+.footer-link-button:disabled {
+  cursor: wait;
+  opacity: 0.72;
 }
 
 .footer-controls {

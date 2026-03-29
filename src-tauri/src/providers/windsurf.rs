@@ -1,4 +1,4 @@
-use super::{MetricLine, MetricFormat};
+use super::{MetricFormat, MetricLine};
 
 #[cfg(target_os = "windows")]
 use std::collections::BTreeSet;
@@ -25,12 +25,18 @@ fn get_state_db_paths() -> Vec<String> {
             vec![
                 // Windsurf (stable)
                 base.join("Windsurf")
-                    .join("User").join("globalStorage").join("state.vscdb")
-                    .to_string_lossy().to_string(),
+                    .join("User")
+                    .join("globalStorage")
+                    .join("state.vscdb")
+                    .to_string_lossy()
+                    .to_string(),
                 // Windsurf Next (preview)
                 base.join("Windsurf - Next")
-                    .join("User").join("globalStorage").join("state.vscdb")
-                    .to_string_lossy().to_string(),
+                    .join("User")
+                    .join("globalStorage")
+                    .join("state.vscdb")
+                    .to_string_lossy()
+                    .to_string(),
             ]
         }
         None => vec![],
@@ -41,7 +47,8 @@ fn read_db_value(db_path: &str, key: &str) -> Option<String> {
     let conn = rusqlite::Connection::open_with_flags(
         db_path,
         rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY | rusqlite::OpenFlags::SQLITE_OPEN_NO_MUTEX,
-    ).ok()?;
+    )
+    .ok()?;
 
     let sql = format!("SELECT value FROM ItemTable WHERE key = '{}' LIMIT 1", key);
     let mut stmt = conn.prepare(&sql).ok()?;
@@ -62,6 +69,49 @@ struct LocalLsDiscovery {
     ports: Vec<u16>,
     csrf: String,
     version: String,
+}
+
+#[cfg(target_os = "linux")]
+fn get_ps_executable_path() -> std::path::PathBuf {
+    for candidate in ["/usr/bin/ps", "/bin/ps"] {
+        let path = std::path::PathBuf::from(candidate);
+        if path.exists() {
+            return path;
+        }
+    }
+
+    std::path::PathBuf::from("ps")
+}
+
+#[cfg(target_os = "windows")]
+fn get_powershell_executable_path() -> std::path::PathBuf {
+    let mut candidates = Vec::new();
+
+    for env_key in ["WINDIR", "SystemRoot"] {
+        if let Some(root) = std::env::var_os(env_key) {
+            let base = std::path::PathBuf::from(root);
+            candidates.push(
+                base.join("System32")
+                    .join("WindowsPowerShell")
+                    .join("v1.0")
+                    .join("powershell.exe"),
+            );
+            candidates.push(
+                base.join("Sysnative")
+                    .join("WindowsPowerShell")
+                    .join("v1.0")
+                    .join("powershell.exe"),
+            );
+        }
+    }
+
+    for candidate in candidates {
+        if candidate.exists() {
+            return candidate;
+        }
+    }
+
+    std::path::PathBuf::from("powershell.exe")
 }
 
 fn extract_flag(command: &str, flag: &str) -> Option<String> {
@@ -91,17 +141,23 @@ fn discover_ls(variant_marker: &str) -> Option<LocalLsDiscovery> {
 
     #[cfg(target_os = "linux")]
     {
-        let output = match std::process::Command::new("ps").args(["aux"]).output() {
+        let output = match std::process::Command::new(get_ps_executable_path())
+            .args(["aux"])
+            .output()
+        {
             Ok(output) => output,
             Err(_) => return None,
         };
 
         let stdout = String::from_utf8_lossy(&output.stdout);
-        collect_ls_candidates(&stdout, variant_marker).into_iter().next().map(|(ports, csrf)| LocalLsDiscovery {
-            ports,
-            csrf,
-            version: "unknown".into(),
-        })
+        collect_ls_candidates(&stdout, variant_marker)
+            .into_iter()
+            .next()
+            .map(|(ports, csrf)| LocalLsDiscovery {
+                ports,
+                csrf,
+                version: "unknown".into(),
+            })
     }
 
     #[cfg(target_os = "macos")]
@@ -128,7 +184,9 @@ fn collect_ls_candidates(text: &str, variant_marker: &str) -> Vec<(Vec<u16>, Str
         if let Some((extension_port, csrf)) = parse_ls_args(trimmed) {
             let mut ports = Vec::new();
             ports.push(extension_port);
-            if !candidates.iter().any(|(existing_ports, existing_csrf)| existing_ports == &ports && existing_csrf == &csrf) {
+            if !candidates.iter().any(|(existing_ports, existing_csrf)| {
+                existing_ports == &ports && existing_csrf == &csrf
+            }) {
                 candidates.push((ports, csrf));
             }
         }
@@ -142,7 +200,8 @@ fn parse_ls_args(text: &str) -> Option<(u16, String)> {
 
     let parts: Vec<&str> = text.split_whitespace().collect();
     for i in 0..parts.len() {
-        if parts[i] == "--extension_server_port" || parts[i].starts_with("--extension_server_port=") {
+        if parts[i] == "--extension_server_port" || parts[i].starts_with("--extension_server_port=")
+        {
             if parts[i].contains('=') {
                 extension_port = parts[i].split('=').nth(1).and_then(|p| p.parse().ok());
             } else if i + 1 < parts.len() {
@@ -166,7 +225,7 @@ fn parse_ls_args(text: &str) -> Option<(u16, String)> {
 
 #[cfg(target_os = "windows")]
 fn run_hidden_powershell(script: &str) -> Option<String> {
-    let output = std::process::Command::new("powershell.exe")
+    let output = std::process::Command::new(get_powershell_executable_path())
         .creation_flags(CREATE_NO_WINDOW)
         .args([
             "-NoProfile",
@@ -195,8 +254,14 @@ fn discover_windows_ls(variant_marker: &str) -> Option<LocalLsDiscovery> {
     let processes = parse_windows_json_items(&process_json);
 
     for item in processes {
-        let process_id = item.get("ProcessId").and_then(|value| value.as_u64()).map(|value| value as u32);
-        let command = item.get("CommandLine").and_then(|value| value.as_str()).map(|value| value.to_string());
+        let process_id = item
+            .get("ProcessId")
+            .and_then(|value| value.as_u64())
+            .map(|value| value as u32);
+        let command = item
+            .get("CommandLine")
+            .and_then(|value| value.as_str())
+            .map(|value| value.to_string());
 
         let (process_id, command) = match (process_id, command) {
             (Some(process_id), Some(command)) => (process_id, command),
@@ -215,8 +280,8 @@ fn discover_windows_ls(variant_marker: &str) -> Option<LocalLsDiscovery> {
             None => continue,
         };
 
-        let version = extract_flag(&command, "--windsurf_version")
-            .unwrap_or_else(|| "unknown".into());
+        let version =
+            extract_flag(&command, "--windsurf_version").unwrap_or_else(|| "unknown".into());
 
         let port_script = format!(
             "& {{ $ports = @(Get-NetTCPConnection -OwningProcess {} -State Listen -ErrorAction SilentlyContinue | Select-Object -ExpandProperty LocalPort); if ($ports.Count -eq 0) {{ '[]' }} else {{ $ports | ConvertTo-Json -Compress }} }}",
@@ -228,7 +293,11 @@ fn discover_windows_ls(variant_marker: &str) -> Option<LocalLsDiscovery> {
             ports.push(extension_port);
         }
 
-        return Some(LocalLsDiscovery { ports, csrf, version });
+        return Some(LocalLsDiscovery {
+            ports,
+            csrf,
+            version,
+        });
     }
 
     None
@@ -259,18 +328,16 @@ fn parse_windows_ports(raw: &str) -> Vec<u16> {
     ports.into_iter().collect()
 }
 
-fn probe_ls_port(port: u16, scheme: &str, csrf: &str, ide_name: &str, version: &str) -> bool {
-    let client = match reqwest::blocking::Client::builder()
-        .danger_accept_invalid_certs(true)
-        .build()
-    {
-        Ok(client) => client,
-        Err(_) => return false,
-    };
-
+fn probe_ls_port(
+    client: &reqwest::blocking::Client,
+    port: u16,
+    csrf: &str,
+    ide_name: &str,
+    version: &str,
+) -> bool {
     let url = format!(
-        "{}://127.0.0.1:{}/exa.language_server_pb.LanguageServerService/GetUnleashData",
-        scheme, port
+        "https://127.0.0.1:{}/exa.language_server_pb.LanguageServerService/GetUnleashData",
+        port
     );
 
     let body = serde_json::json!({
@@ -296,26 +363,32 @@ fn probe_ls_port(port: u16, scheme: &str, csrf: &str, ide_name: &str, version: &
         .is_ok()
 }
 
-fn find_working_ls_endpoint(discovery: &LocalLsDiscovery, ide_name: &str) -> Option<(u16, &'static str)> {
+fn find_working_ls_endpoint(
+    client: &reqwest::blocking::Client,
+    discovery: &LocalLsDiscovery,
+    ide_name: &str,
+) -> Option<u16> {
     for &port in &discovery.ports {
-        if probe_ls_port(port, "https", &discovery.csrf, ide_name, &discovery.version) {
-            return Some((port, "https"));
-        }
-        if probe_ls_port(port, "http", &discovery.csrf, ide_name, &discovery.version) {
-            return Some((port, "http"));
+        if probe_ls_port(client, port, &discovery.csrf, ide_name, &discovery.version) {
+            return Some(port);
         }
     }
     None
 }
 
 /// Call the LS GetUserStatus endpoint
-fn call_ls_get_user_status(port: u16, scheme: &str, csrf: &str, api_key: &str, ide_name: &str, version: &str) -> Result<serde_json::Value, String> {
-    let client = reqwest::blocking::Client::builder()
-        .danger_accept_invalid_certs(true)
-        .build()
-        .map_err(|e| format!("HTTP client error: {}", e))?;
-
-    let url = format!("{}://127.0.0.1:{}/exa.language_server_pb.LanguageServerService/GetUserStatus", scheme, port);
+fn call_ls_get_user_status(
+    client: &reqwest::blocking::Client,
+    port: u16,
+    csrf: &str,
+    api_key: &str,
+    ide_name: &str,
+    version: &str,
+) -> Result<serde_json::Value, String> {
+    let url = format!(
+        "https://127.0.0.1:{}/exa.language_server_pb.LanguageServerService/GetUserStatus",
+        port
+    );
 
     let body = serde_json::json!({
         "metadata": {
@@ -347,9 +420,10 @@ fn call_ls_get_user_status(port: u16, scheme: &str, csrf: &str, api_key: &str, i
         .map_err(|e| format!("Invalid LS response: {}", e))
 }
 
-/// Try connecting to the LS on a given port with both schemes
-fn try_endpoint(port: u16, scheme: &str, csrf: &str, api_key: &str, ide_name: &str, version: &str) -> Option<serde_json::Value> {
-    call_ls_get_user_status(port, scheme, csrf, api_key, ide_name, version).ok()
+fn build_local_tls_client() -> Result<reqwest::blocking::Client, String> {
+    reqwest::blocking::Client::builder()
+        .build()
+        .map_err(|e| format!("HTTP client error: {}", e))
 }
 
 pub fn probe() -> Result<(Option<String>, Vec<MetricLine>), String> {
@@ -375,24 +449,41 @@ pub fn probe() -> Result<(Option<String>, Vec<MetricLine>), String> {
     let discovery = discover_ls(variant_name)
         .ok_or("Windsurf language server not running. Start Windsurf and try again.")?;
 
-    let (port, scheme) = find_working_ls_endpoint(&discovery, variant_name)
-        .ok_or("Could not connect to Windsurf language server.")?;
+    let client = build_local_tls_client()?;
 
-    let data = try_endpoint(port, scheme, &discovery.csrf, &api_key, variant_name, &discovery.version)
-        .ok_or("Could not connect to Windsurf language server.")?;
+    let port = find_working_ls_endpoint(&client, &discovery, variant_name)
+        .ok_or("Could not verify a trusted HTTPS connection to the Windsurf language server.")?;
 
-    let user_status = data.get("userStatus")
+    let data = call_ls_get_user_status(
+        &client,
+        port,
+        &discovery.csrf,
+        &api_key,
+        variant_name,
+        &discovery.version,
+    )?;
+
+    let user_status = data
+        .get("userStatus")
         .ok_or("No user status in LS response.")?;
 
-    let plan_status = user_status.get("planStatus").cloned().unwrap_or(serde_json::Value::Null);
-    let plan_info = plan_status.get("planInfo").cloned().unwrap_or(serde_json::Value::Null);
+    let plan_status = user_status
+        .get("planStatus")
+        .cloned()
+        .unwrap_or(serde_json::Value::Null);
+    let plan_info = plan_status
+        .get("planInfo")
+        .cloned()
+        .unwrap_or(serde_json::Value::Null);
 
-    let plan = plan_info.get("planName")
+    let plan = plan_info
+        .get("planName")
         .and_then(|v| v.as_str())
         .map(|s| s.to_string());
 
     // Billing cycle for reset info
-    let plan_end = plan_status.get("planEnd")
+    let plan_end = plan_status
+        .get("planEnd")
         .and_then(|v| v.as_str())
         .map(|s| s.to_string());
 
@@ -400,8 +491,13 @@ pub fn probe() -> Result<(Option<String>, Vec<MetricLine>), String> {
 
     // Credits are in hundredths — divide by 100
     // Prompt credits
-    let prompt_total = plan_status.get("availablePromptCredits").and_then(|v| v.as_f64());
-    let prompt_used = plan_status.get("usedPromptCredits").and_then(|v| v.as_f64()).unwrap_or(0.0);
+    let prompt_total = plan_status
+        .get("availablePromptCredits")
+        .and_then(|v| v.as_f64());
+    let prompt_used = plan_status
+        .get("usedPromptCredits")
+        .and_then(|v| v.as_f64())
+        .unwrap_or(0.0);
 
     if let Some(total) = prompt_total {
         if total > 0.0 {
@@ -409,15 +505,23 @@ pub fn probe() -> Result<(Option<String>, Vec<MetricLine>), String> {
                 label: "Prompt credits".into(),
                 used: prompt_used / 100.0,
                 limit: total / 100.0,
-                format: MetricFormat { kind: "count".into(), suffix: Some("credits".into()) },
+                format: MetricFormat {
+                    kind: "count".into(),
+                    suffix: Some("credits".into()),
+                },
                 resets_at: plan_end.clone(),
             });
         }
     }
 
     // Flex credits
-    let flex_total = plan_status.get("availableFlexCredits").and_then(|v| v.as_f64());
-    let flex_used = plan_status.get("usedFlexCredits").and_then(|v| v.as_f64()).unwrap_or(0.0);
+    let flex_total = plan_status
+        .get("availableFlexCredits")
+        .and_then(|v| v.as_f64());
+    let flex_used = plan_status
+        .get("usedFlexCredits")
+        .and_then(|v| v.as_f64())
+        .unwrap_or(0.0);
 
     if let Some(total) = flex_total {
         if total > 0.0 {
@@ -425,7 +529,10 @@ pub fn probe() -> Result<(Option<String>, Vec<MetricLine>), String> {
                 label: "Flex credits".into(),
                 used: flex_used / 100.0,
                 limit: total / 100.0,
-                format: MetricFormat { kind: "count".into(), suffix: Some("credits".into()) },
+                format: MetricFormat {
+                    kind: "count".into(),
+                    suffix: Some("credits".into()),
+                },
                 resets_at: None,
             });
         }

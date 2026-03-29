@@ -18,7 +18,6 @@
     "core:window:allow-set-position",
     "core:window:allow-outer-size",
     "core:window:allow-inner-size",
-    "core:window:allow-scale-factor",
-    "opener:default"
+    "core:window:allow-scale-factor"
   ]
 }
