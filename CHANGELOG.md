@@ -2,6 +2,12 @@
 
 All notable changes to UsageDock are documented here.
 
+## [0.2.4] - 2026-03-29
+
+- Merged the current `dev` branch into `main` for the public release line.
+- Shipped the hardened app configuration, updater plumbing, and provider integration fixes on `main`.
+- Added open-source repository basics including MIT licensing, contribution guidance, security policy, changelog, and GitHub templates.
+
 ## [0.2.3] - 2026-03-29
 
 - Added updater artifact workflow fixes for Windows and Linux release jobs.
