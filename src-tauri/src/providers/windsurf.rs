@@ -328,66 +328,19 @@ fn parse_windows_ports(raw: &str) -> Vec<u16> {
     ports.into_iter().collect()
 }
 
-fn probe_ls_port(
-    client: &reqwest::blocking::Client,
-    port: u16,
-    csrf: &str,
-    ide_name: &str,
-    version: &str,
-) -> bool {
-    let url = format!(
-        "https://127.0.0.1:{}/exa.language_server_pb.LanguageServerService/GetUnleashData",
-        port
-    );
-
-    let body = serde_json::json!({
-        "context": {
-            "properties": {
-                "devMode": "false",
-                "extensionVersion": version,
-                "ide": ide_name,
-                "ideVersion": version,
-                "os": if cfg!(target_os = "windows") { "windows" } else { "linux" },
-            }
-        }
-    });
-
-    client
-        .post(&url)
-        .header("Content-Type", "application/json")
-        .header("Connect-Protocol-Version", "1")
-        .header("x-codeium-csrf-token", csrf)
-        .json(&body)
-        .timeout(std::time::Duration::from_secs(5))
-        .send()
-        .is_ok()
-}
-
-fn find_working_ls_endpoint(
-    client: &reqwest::blocking::Client,
-    discovery: &LocalLsDiscovery,
-    ide_name: &str,
-) -> Option<u16> {
-    for &port in &discovery.ports {
-        if probe_ls_port(client, port, &discovery.csrf, ide_name, &discovery.version) {
-            return Some(port);
-        }
-    }
-    None
-}
-
 /// Call the LS GetUserStatus endpoint
 fn call_ls_get_user_status(
     client: &reqwest::blocking::Client,
     port: u16,
+    scheme: &str,
     csrf: &str,
     api_key: &str,
     ide_name: &str,
     version: &str,
 ) -> Result<serde_json::Value, String> {
     let url = format!(
-        "https://127.0.0.1:{}/exa.language_server_pb.LanguageServerService/GetUserStatus",
-        port
+        "{}://127.0.0.1:{}/exa.language_server_pb.LanguageServerService/GetUserStatus",
+        scheme, port
     );
 
     let body = serde_json::json!({
@@ -420,10 +373,41 @@ fn call_ls_get_user_status(
         .map_err(|e| format!("Invalid LS response: {}", e))
 }
 
-fn build_local_tls_client() -> Result<reqwest::blocking::Client, String> {
+fn build_local_client(accept_invalid_certs: bool) -> Result<reqwest::blocking::Client, String> {
     reqwest::blocking::Client::builder()
+        .danger_accept_invalid_certs(accept_invalid_certs)
         .build()
         .map_err(|e| format!("HTTP client error: {}", e))
+}
+
+fn try_user_status_candidates(
+    client: &reqwest::blocking::Client,
+    discovery: &LocalLsDiscovery,
+    api_key: &str,
+    ide_name: &str,
+    include_http_fallback: bool,
+) -> Option<(u16, &'static str, serde_json::Value)> {
+    for &port in &discovery.ports {
+        for scheme in if include_http_fallback {
+            ["https", "http"].as_slice()
+        } else {
+            ["https"].as_slice()
+        } {
+            if let Ok(data) = call_ls_get_user_status(
+                client,
+                port,
+                scheme,
+                &discovery.csrf,
+                api_key,
+                ide_name,
+                &discovery.version,
+            ) {
+                return Some((port, scheme, data));
+            }
+        }
+    }
+
+    None
 }
 
 pub fn probe() -> Result<(Option<String>, Vec<MetricLine>), String> {
@@ -449,19 +433,30 @@ pub fn probe() -> Result<(Option<String>, Vec<MetricLine>), String> {
     let discovery = discover_ls(variant_name)
         .ok_or("Windsurf language server not running. Start Windsurf and try again.")?;
 
-    let client = build_local_tls_client()?;
+    let trusted_client = build_local_client(false)?;
 
-    let port = find_working_ls_endpoint(&client, &discovery, variant_name)
-        .ok_or("Could not verify a trusted HTTPS connection to the Windsurf language server.")?;
-
-    let data = call_ls_get_user_status(
-        &client,
-        port,
-        &discovery.csrf,
+    let data = if let Some((_port, _scheme, data)) = try_user_status_candidates(
+        &trusted_client,
+        &discovery,
         &api_key,
         variant_name,
-        &discovery.version,
-    )?;
+        false,
+    ) {
+        data
+    } else {
+        // Windsurf commonly exposes its localhost server with a self-signed cert
+        // or plain HTTP. Keep the fallback restricted to loopback only.
+        let fallback_client = build_local_client(true)?;
+        let (_port, _scheme, data) = try_user_status_candidates(
+            &fallback_client,
+            &discovery,
+            &api_key,
+            variant_name,
+            true,
+        )
+            .ok_or("Could not connect to Windsurf language server.")?;
+        data
+    };
 
     let user_status = data
         .get("userStatus")
