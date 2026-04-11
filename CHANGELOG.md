@@ -2,6 +2,11 @@
 
 All notable changes to UsageDock are documented here.
 
+## [0.2.7] - 2026-04-12
+
+- Added Cursor free-tier usage rendering so included usage percentages show instead of a generic "No usage data" state.
+- Updated the tray header subtitle to the shorter and clearer line: `Local AI coding usage at a glance`.
+
 ## [0.2.6] - 2026-04-11
 
 - Hardened provider integration paths by removing untrusted executable lookup fallbacks for `gh`, `ps`, and `powershell.exe`.
