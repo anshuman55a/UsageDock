@@ -50,9 +50,10 @@ fn read_db_value(db_path: &str, key: &str) -> Option<String> {
     )
     .ok()?;
 
-    let sql = format!("SELECT value FROM ItemTable WHERE key = '{}' LIMIT 1", key);
-    let mut stmt = conn.prepare(&sql).ok()?;
-    stmt.query_row([], |row| row.get(0)).ok()
+    let mut stmt = conn
+        .prepare("SELECT value FROM ItemTable WHERE key = ?1 LIMIT 1")
+        .ok()?;
+    stmt.query_row([key], |row| row.get(0)).ok()
 }
 
 /// Load API key from windsurfAuthStatus
@@ -72,19 +73,19 @@ struct LocalLsDiscovery {
 }
 
 #[cfg(target_os = "linux")]
-fn get_ps_executable_path() -> std::path::PathBuf {
+fn get_ps_executable_path() -> Option<std::path::PathBuf> {
     for candidate in ["/usr/bin/ps", "/bin/ps"] {
         let path = std::path::PathBuf::from(candidate);
         if path.exists() {
-            return path;
+            return Some(path);
         }
     }
 
-    std::path::PathBuf::from("ps")
+    None
 }
 
 #[cfg(target_os = "windows")]
-fn get_powershell_executable_path() -> std::path::PathBuf {
+fn get_powershell_executable_path() -> Option<std::path::PathBuf> {
     let mut candidates = Vec::new();
 
     for env_key in ["WINDIR", "SystemRoot"] {
@@ -107,11 +108,11 @@ fn get_powershell_executable_path() -> std::path::PathBuf {
 
     for candidate in candidates {
         if candidate.exists() {
-            return candidate;
+            return Some(candidate);
         }
     }
 
-    std::path::PathBuf::from("powershell.exe")
+    None
 }
 
 fn extract_flag(command: &str, flag: &str) -> Option<String> {
@@ -141,7 +142,8 @@ fn discover_ls(variant_marker: &str) -> Option<LocalLsDiscovery> {
 
     #[cfg(target_os = "linux")]
     {
-        let output = match std::process::Command::new(get_ps_executable_path())
+        let ps_path = get_ps_executable_path()?;
+        let output = match std::process::Command::new(ps_path)
             .args(["aux"])
             .output()
         {
@@ -225,7 +227,8 @@ fn parse_ls_args(text: &str) -> Option<(u16, String)> {
 
 #[cfg(target_os = "windows")]
 fn run_hidden_powershell(script: &str) -> Option<String> {
-    let output = std::process::Command::new(get_powershell_executable_path())
+    let powershell_path = get_powershell_executable_path()?;
+    let output = std::process::Command::new(powershell_path)
         .creation_flags(CREATE_NO_WINDOW)
         .args([
             "-NoProfile",

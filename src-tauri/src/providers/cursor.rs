@@ -41,9 +41,10 @@ fn read_db_value(db_path: &str, key: &str) -> Option<String> {
     )
     .ok()?;
 
-    let sql = format!("SELECT value FROM ItemTable WHERE key = '{}' LIMIT 1", key);
-    let mut stmt = conn.prepare(&sql).ok()?;
-    let result: Option<String> = stmt.query_row([], |row| row.get(0)).ok();
+    let mut stmt = conn
+        .prepare("SELECT value FROM ItemTable WHERE key = ?1 LIMIT 1")
+        .ok()?;
+    let result: Option<String> = stmt.query_row([key], |row| row.get(0)).ok();
     result
 }
 

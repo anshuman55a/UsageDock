@@ -21,7 +21,7 @@ fn get_gh_hosts_path() -> Option<std::path::PathBuf> {
     }
 }
 
-fn get_gh_executable_path() -> std::path::PathBuf {
+fn get_gh_executable_path() -> Option<std::path::PathBuf> {
     #[cfg(target_os = "windows")]
     {
         let candidates = [
@@ -35,12 +35,27 @@ fn get_gh_executable_path() -> std::path::PathBuf {
 
         for candidate in candidates {
             if !candidate.as_os_str().is_empty() && candidate.exists() {
-                return candidate;
+                return Some(candidate);
             }
         }
     }
 
-    std::path::PathBuf::from("gh")
+    #[cfg(not(target_os = "windows"))]
+    {
+        let candidates = [
+            std::path::PathBuf::from("/usr/bin/gh"),
+            std::path::PathBuf::from("/usr/local/bin/gh"),
+            std::path::PathBuf::from("/opt/homebrew/bin/gh"),
+        ];
+
+        for candidate in candidates {
+            if candidate.exists() {
+                return Some(candidate);
+            }
+        }
+    }
+
+    None
 }
 
 fn load_token() -> Result<String, String> {
@@ -66,7 +81,11 @@ fn load_token() -> Result<String, String> {
 }
 
 fn load_token_from_gh_cli() -> Result<String, String> {
-    let mut command = Command::new(get_gh_executable_path());
+    let gh_path = get_gh_executable_path().ok_or_else(|| {
+        "No trusted GitHub CLI executable found. Install GitHub CLI in a standard location and run `gh auth login` first.".to_string()
+    })?;
+
+    let mut command = Command::new(gh_path);
     command.args(["auth", "token", "--hostname", "github.com"]);
 
     #[cfg(target_os = "windows")]
