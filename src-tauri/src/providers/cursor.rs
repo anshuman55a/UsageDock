@@ -190,6 +190,65 @@ pub fn probe() -> Result<(Option<String>, Vec<MetricLine>), String> {
                 resets_at,
             });
         }
+
+        if limit <= 0.0 {
+            let resets_at = usage
+                .get("billingCycleEnd")
+                .and_then(|v| v.as_str().or_else(|| v.as_f64().map(|_| "")))
+                .and_then(|_| {
+                    usage.get("billingCycleEnd").and_then(|v| {
+                        let ms = if let Some(s) = v.as_str() {
+                            s.parse::<i64>().ok()
+                        } else {
+                            v.as_i64()
+                        };
+                        ms.map(chrono_lite_ms_to_iso)
+                    })
+                });
+
+            if let Some(total_used) = pu.get("totalPercentUsed").and_then(|v| v.as_f64()) {
+                lines.push(MetricLine::Progress {
+                    label: "Included usage".into(),
+                    used: total_used.clamp(0.0, 100.0),
+                    limit: 100.0,
+                    format: MetricFormat {
+                        kind: "percent".into(),
+                        suffix: None,
+                    },
+                    resets_at: resets_at.clone(),
+                });
+            }
+
+            if let Some(auto_used) = pu.get("autoPercentUsed").and_then(|v| v.as_f64()) {
+                if auto_used > 0.0 {
+                    lines.push(MetricLine::Progress {
+                        label: "Auto".into(),
+                        used: auto_used.clamp(0.0, 100.0),
+                        limit: 100.0,
+                        format: MetricFormat {
+                            kind: "percent".into(),
+                            suffix: None,
+                        },
+                        resets_at: resets_at.clone(),
+                    });
+                }
+            }
+
+            if let Some(api_used) = pu.get("apiPercentUsed").and_then(|v| v.as_f64()) {
+                if api_used > 0.0 {
+                    lines.push(MetricLine::Progress {
+                        label: "API".into(),
+                        used: api_used.clamp(0.0, 100.0),
+                        limit: 100.0,
+                        format: MetricFormat {
+                            kind: "percent".into(),
+                            suffix: None,
+                        },
+                        resets_at,
+                    });
+                }
+            }
+        }
     }
 
     // On-demand spend limit
