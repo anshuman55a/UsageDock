@@ -2,6 +2,12 @@
 
 All notable changes to UsageDock are documented here.
 
+## [0.2.6] - 2026-04-11
+
+- Hardened provider integration paths by removing untrusted executable lookup fallbacks for `gh`, `ps`, and `powershell.exe`.
+- Parameterized SQLite reads in the touched providers to avoid string-built queries.
+- Preserved the current Windsurf local-LS behavior while keeping the stricter endpoint-selection fix in place.
+
 ## [0.2.4] - 2026-03-29
 
 - Merged the current `dev` branch into `main` for the public release line.
