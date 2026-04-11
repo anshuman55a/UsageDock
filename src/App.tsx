@@ -469,7 +469,7 @@ function App() {
           </div>
           <div className="header-copy">
             <span className="header-product">UsageDock</span>
-            <span className="header-subtitle">Quiet local usage signals for AI coding tools</span>
+            <span className="header-subtitle">Local AI coding usage at a glance</span>
           </div>
         </div>
         <div className="header-actions">
