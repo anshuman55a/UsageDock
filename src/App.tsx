@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef, type CSSProperties } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { RefreshCw, AlertCircle, ChevronDown } from "lucide-react";
+import { RefreshCw, AlertCircle, ChevronDown, Settings, X } from "lucide-react";
 import { PROVIDER_ICONS } from "./ProviderIcons";
 import "./App.css";
 
@@ -315,7 +315,10 @@ function App() {
     return AUTO_REFRESH_OPTIONS.includes(stored as (typeof AUTO_REFRESH_OPTIONS)[number]) ? stored : 15;
   });
   const [isIntervalMenuOpen, setIsIntervalMenuOpen] = useState(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const intervalMenuRef = useRef<HTMLDivElement>(null);
+  const settingsPanelRef = useRef<HTMLDivElement>(null);
+  const settingsBtnRef = useRef<HTMLButtonElement>(null);
   const availableProviders = providers.filter((provider) => !provider.error && provider.lines.length > 0);
   const unavailableProviders = providers.filter((provider) => provider.error || provider.lines.length === 0);
   const unavailableCaption = availableProviders.length > 0
@@ -455,6 +458,38 @@ function App() {
     };
   }, [isIntervalMenuOpen]);
 
+  useEffect(() => {
+    if (!isSettingsOpen) {
+      return;
+    }
+
+    function handlePointerDown(event: MouseEvent) {
+      if (
+        settingsPanelRef.current &&
+        !settingsPanelRef.current.contains(event.target as Node) &&
+        settingsBtnRef.current &&
+        !settingsBtnRef.current.contains(event.target as Node)
+      ) {
+        setIsSettingsOpen(false);
+        setIsIntervalMenuOpen(false);
+      }
+    }
+
+    function handleEscape(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setIsSettingsOpen(false);
+        setIsIntervalMenuOpen(false);
+      }
+    }
+
+    window.addEventListener("mousedown", handlePointerDown);
+    window.addEventListener("keydown", handleEscape);
+    return () => {
+      window.removeEventListener("mousedown", handlePointerDown);
+      window.removeEventListener("keydown", handleEscape);
+    };
+  }, [isSettingsOpen]);
+
   const autoRefreshSummary = autoRefreshEnabled
     ? `Auto refresh every ${autoRefreshMinutes} min`
     : "Auto refresh off";
@@ -463,20 +498,27 @@ function App() {
   return (
     <div className="app-shell">
       <div className="header">
-        <div className="header-title">
-          <div className="header-mark">
-            <BoltIcon />
-          </div>
-          <div className="header-copy">
-            <span className="header-product">UsageDock</span>
-            <span className="header-subtitle">Local AI coding usage at a glance</span>
-          </div>
+        <div className="header-mark">
+          <BoltIcon />
+        </div>
+        <span className="header-product">UsageDock</span>
+        <div className={`header-status ${isLoading ? "header-status-live" : ""}`}>
+          <span className="header-status-dot" />
+          <span>{statusText}</span>
         </div>
         <div className="header-actions">
-          <div className={`header-status ${isLoading ? "header-status-live" : ""}`}>
-            <span className="header-status-dot" />
-            <span>{statusText}</span>
-          </div>
+          <button
+            ref={settingsBtnRef}
+            className={`btn-icon settings-btn ${isSettingsOpen ? "settings-btn-active" : ""}`}
+            onClick={() => {
+              setIsSettingsOpen((prev) => !prev);
+              if (isSettingsOpen) setIsIntervalMenuOpen(false);
+            }}
+            title="Settings"
+            aria-label="Toggle settings"
+          >
+            {isSettingsOpen ? <X /> : <Settings />}
+          </button>
           <button
             className={`btn-icon refresh-all ${isLoading ? "spinning" : ""}`}
             onClick={refreshAll}
@@ -487,6 +529,79 @@ function App() {
           </button>
         </div>
       </div>
+
+      {isSettingsOpen && (
+        <div className="settings-panel" ref={settingsPanelRef}>
+          <div className="settings-row">
+            <label className="toggle-field">
+              <span className="toggle-label">Auto refresh</span>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={autoRefreshEnabled}
+                className={`toggle-switch ${autoRefreshEnabled ? "toggle-switch-on" : ""}`}
+                onClick={() => setAutoRefreshEnabled((prev) => !prev)}
+              >
+                <span className="toggle-thumb" />
+              </button>
+            </label>
+
+            <div
+              ref={intervalMenuRef}
+              className={`select-field ${!autoRefreshEnabled ? "select-field-disabled" : ""}`}
+            >
+              <span className="select-label">Interval</span>
+              <button
+                type="button"
+                className="footer-select interval-trigger"
+                onClick={() => autoRefreshEnabled && setIsIntervalMenuOpen((prev) => !prev)}
+                disabled={!autoRefreshEnabled}
+                aria-haspopup="listbox"
+                aria-expanded={isIntervalMenuOpen}
+              >
+                {autoRefreshMinutes} min
+                <ChevronDown className={`interval-trigger-icon ${isIntervalMenuOpen ? "interval-trigger-icon-open" : ""}`} />
+              </button>
+              {autoRefreshEnabled && isIntervalMenuOpen && (
+                <div className="interval-menu" role="listbox" aria-label="Auto refresh interval">
+                  {AUTO_REFRESH_OPTIONS.map((minutes) => (
+                    <button
+                      key={minutes}
+                      type="button"
+                      role="option"
+                      aria-selected={minutes === autoRefreshMinutes}
+                      className={`interval-option ${minutes === autoRefreshMinutes ? "interval-option-active" : ""}`}
+                      onClick={() => {
+                        setAutoRefreshMinutes(minutes);
+                        setIsIntervalMenuOpen(false);
+                      }}
+                    >
+                      <span>{minutes} min</span>
+                      {minutes === autoRefreshMinutes && <span className="interval-option-check">Current</span>}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {updaterEnabled && (
+            <div className="settings-row settings-row-update">
+              <span className="settings-update-label">
+                {isCheckingUpdate ? "Checking for updates…" : "App updates"}
+              </span>
+              <button
+                type="button"
+                className="settings-update-btn"
+                onClick={() => checkForUpdates(true)}
+                disabled={isCheckingUpdate || isInstallingUpdate}
+              >
+                {isCheckingUpdate ? "Checking…" : "Check now"}
+              </button>
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="provider-list">
         {updaterEnabled && (updateInfo || isInstallingUpdate || updateError) && (
@@ -576,78 +691,12 @@ function App() {
       </div>
 
       <div className="footer">
-        <div className="footer-row">
-          <span className="footer-text">
-            {lastRefresh
-              ? `Updated ${lastRefresh.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`
-              : "Loading provider activity"}
-          </span>
-          <div className="footer-meta-actions">
-            {updaterEnabled && (
-              <button
-                type="button"
-                className="footer-link-button"
-                onClick={() => checkForUpdates(true)}
-                disabled={isCheckingUpdate || isInstallingUpdate}
-              >
-                {isCheckingUpdate ? "Checking updates" : "Check updates"}
-              </button>
-            )}
-            <span className="footer-text">{autoRefreshSummary}</span>
-          </div>
-        </div>
-        <div className="footer-row footer-controls">
-          <label className="toggle-field">
-            <span className="toggle-label">Auto refresh</span>
-            <button
-              type="button"
-              role="switch"
-              aria-checked={autoRefreshEnabled}
-              className={`toggle-switch ${autoRefreshEnabled ? "toggle-switch-on" : ""}`}
-              onClick={() => setAutoRefreshEnabled((prev) => !prev)}
-            >
-              <span className="toggle-thumb" />
-            </button>
-          </label>
-
-          <div
-            ref={intervalMenuRef}
-            className={`select-field ${!autoRefreshEnabled ? "select-field-disabled" : ""}`}
-          >
-            <span className="select-label">Interval</span>
-            <button
-              type="button"
-              className="footer-select interval-trigger"
-              onClick={() => autoRefreshEnabled && setIsIntervalMenuOpen((prev) => !prev)}
-              disabled={!autoRefreshEnabled}
-              aria-haspopup="listbox"
-              aria-expanded={isIntervalMenuOpen}
-            >
-              {autoRefreshMinutes} min
-              <ChevronDown className={`interval-trigger-icon ${isIntervalMenuOpen ? "interval-trigger-icon-open" : ""}`} />
-            </button>
-            {autoRefreshEnabled && isIntervalMenuOpen && (
-              <div className="interval-menu" role="listbox" aria-label="Auto refresh interval">
-                {AUTO_REFRESH_OPTIONS.map((minutes) => (
-                  <button
-                    key={minutes}
-                    type="button"
-                    role="option"
-                    aria-selected={minutes === autoRefreshMinutes}
-                    className={`interval-option ${minutes === autoRefreshMinutes ? "interval-option-active" : ""}`}
-                    onClick={() => {
-                      setAutoRefreshMinutes(minutes);
-                      setIsIntervalMenuOpen(false);
-                    }}
-                  >
-                    <span>{minutes} min</span>
-                    {minutes === autoRefreshMinutes && <span className="interval-option-check">Current</span>}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
+        <span className="footer-text">
+          {lastRefresh
+            ? `Updated ${lastRefresh.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`
+            : "Loading provider activity"}
+        </span>
+        <span className="footer-text">{autoRefreshSummary}</span>
       </div>
     </div>
   );
