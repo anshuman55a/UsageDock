@@ -151,7 +151,7 @@ function getSharedResetLabel(lines: MetricLine[]): string | null {
 }
 
 // Progress Bar Component
-function ProgressMetric({ line }: { line: ProgressLine }) {
+function ProgressMetric({ line, hideReset }: { line: ProgressLine; hideReset?: boolean }) {
   const pct = line.limit > 0 ? Math.min((line.used / line.limit) * 100, 100) : 0;
   const color = getProgressColor(pct);
 
@@ -170,7 +170,7 @@ function ProgressMetric({ line }: { line: ProgressLine }) {
           }}
         />
       </div>
-      {line.resetsAt && (
+      {!hideReset && line.resetsAt && (
         <span className="progress-subtitle">{timeUntilReset(line.resetsAt)}</span>
       )}
     </div>
@@ -277,7 +277,7 @@ function ProviderCard({
           {provider.lines.map((line, i) => {
             switch (line.type) {
               case "progress":
-                return <ProgressMetric key={i} line={line} />;
+                return <ProgressMetric key={i} line={line} hideReset={!!sharedResetLabel} />;
               case "text":
                 return <TextMetric key={i} line={line} />;
               case "badge":
