@@ -2,6 +2,12 @@
 
 All notable changes to UsageDock are documented here.
 
+## [0.2.8] - 2026-04-15
+
+- Compressed the tray header into a single tighter row and moved refresh settings into a top settings panel.
+- Reduced duplicate reset copy in provider cards and cleaned up header spacing and status density.
+- Fixed the custom interval menu so it opens downward from the top settings row and layers cleanly above provider cards.
+
 ## [0.2.7] - 2026-04-12
 
 - Added Cursor free-tier usage rendering so included usage percentages show instead of a generic "No usage data" state.
