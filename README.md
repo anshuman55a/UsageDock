@@ -1,90 +1,217 @@
 # UsageDock
 
-UsageDock is a local-first desktop tray app for checking AI coding tool usage without opening another dashboard.
+UsageDock is a local-first tray app for checking AI coding tool usage without opening another dashboard.
 
-It reads the credentials you already use on your machine, fetches provider usage locally, and presents the result in a compact dock-style popup.
+It reads the auth state you already use on your machine, fetches provider usage locally, and shows the result in a compact dock-style popup.
 
-## Why UsageDock
+## What It Does
 
-- Tray-first UI built to be checked in seconds
-- Active providers surface first and unavailable ones stay collapsed until needed
-- Manual refresh per provider plus configurable auto refresh
-- Local-only credential discovery with no hosted relay
-- In-app updates for packaged releases
+- Lives in the system tray instead of taking over the desktop
+- Surfaces active providers first and collapses unavailable ones until needed
+- Supports manual refresh plus configurable auto refresh
+- Shows progress bars, reset timing, and provider-specific status in one compact view
+- Keeps credentials local and does not require a hosted relay
+- Supports in-app updates for packaged releases
 
 ## Supported Providers
 
 | Provider | Auth source | Usage shown |
-|----------|-------------|-------------|
-| **Cursor** | SQLite DB (`state.vscdb`) | Plan usage, on-demand spend |
-| **Claude** | `~/.claude/.credentials.json` | Session, weekly, extra usage |
-| **GitHub Copilot** | `gh` CLI config (`hosts.yml`) | Chat and quota usage |
-| **Codex** | `~/.codex/auth.json` | Session and weekly usage |
-| **Windsurf** | SQLite DB (`state.vscdb`) + local LS | Prompt and flex credits |
+|---|---|---|
+| Cursor | local SQLite state | plan usage, included usage, on-demand spend |
+| Claude | `~/.claude/.credentials.json` | session, weekly, extra usage |
+| GitHub Copilot | GitHub CLI auth (`gh auth login`) | chat and quota usage |
+| Codex | `~/.codex/auth.json` | session and weekly usage |
+| Windsurf | local SQLite state + local language server | prompt and flex credits |
 
 ## Platform Support
 
 - Windows: primary supported platform
-- Linux: supported in code, but release quality should be treated as secondary until Linux-specific security and packaging review is complete
+- Linux: supported in code and CI, but still secondary to Windows for day-to-day validation
 - macOS: planned, not shipped yet
 
+## Privacy Model
+
+UsageDock is designed to be local-first.
+
+- It reads credentials and local state from tools already installed on your machine.
+- It calls provider endpoints or local provider services directly.
+- It does not require you to paste provider tokens into UsageDock.
+- It does not run a hosted backend for core usage tracking.
+
+That said, UsageDock necessarily touches sensitive local auth state in order to work. Review the code before using it if that threat model matters for your environment.
+
+## Tech Stack
+
+- Tauri v2
+- React 19
+- TypeScript
+- Rust
+- Rusqlite for local provider state reads
+
+## Repository Layout
+
+```text
+src/                           React tray UI
+|- App.tsx                     Main app UI and interaction logic
+|- App.css                     Tray UI styling
+|- ProviderIcons.tsx           Provider marks
+`- main.tsx                    Frontend entry
+
+src-tauri/                     Rust backend
+|- src/
+|  |- lib.rs                   Tauri startup, tray behavior, commands
+|  `- providers/               Provider integrations
+|- capabilities/               Tauri capability configuration
+|- icons/                      App and tray icons
+|- Cargo.toml                  Rust dependencies
+`- tauri.conf.json             Tauri app configuration
+```
+
+## Prerequisites
+
+### Required on all platforms
+
+- Node.js 18 or newer
+- npm
+- Rust stable via `rustup`
+
+### Windows build prerequisites
+
+For local Windows builds, install:
+
+- Visual Studio Build Tools 2022
+- the `Desktop development with C++` workload
+- Windows 10/11 SDK as part of the Build Tools install
+- Microsoft Edge WebView2 Runtime
+
+Recommended Rust target on Windows:
+
+```powershell
+rustup default stable-x86_64-pc-windows-msvc
+```
+
+Notes:
+
+- `npx tauri build --bundles nsis` uses the Windows toolchain and NSIS packaging flow configured in this repo.
+- WebView2 is usually already present on modern Windows installs, but packaged app execution depends on it.
+
+### Linux build notes
+
+Linux builds are produced in CI, but local Linux setup depends on your distro packages. Expect to need:
+
+- `pkg-config`
+- WebKitGTK development packages
+- GTK development packages
+- standard C/C++ build tooling
+
+Windows remains the most validated local development path for this repo.
+
 ## Getting Started
-
-### Prerequisites
-
-- [Node.js](https://nodejs.org/) 18+
-- [Rust](https://rustup.rs/) stable
-- Windows builds: [Visual Studio Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/) with the C++ workload
-
-### Run locally
 
 ```bash
 git clone https://github.com/anshuman55a/UsageDock.git
 cd UsageDock/devmeter
 npm install
+```
+
+## Run in Development
+
+```bash
 npm run tauri dev
 ```
 
-### Build a release
+That starts the Vite frontend and the Tauri shell together.
+
+## Build a Local Release
 
 ```bash
-npm run tauri build
+npx tauri build --bundles nsis
 ```
 
-Windows installers are written to `src-tauri/target/release/bundle/`.
+Useful verification commands:
 
-## How It Works
+```bash
+npm run build
+cargo check --manifest-path src-tauri/Cargo.toml
+```
 
-1. UsageDock reads auth state from provider files or local tooling already present on your machine.
-2. Tokens are refreshed when the provider flow supports it.
-3. Usage data is requested directly from provider endpoints or local provider services.
-4. The tray panel shows compact progress bars, reset timing, and provider-specific states.
-
-No extra API key setup is required for the supported flows.
-
-## Project Structure
+Windows release artifacts are written to:
 
 ```text
-src/                    React frontend
-|- App.tsx              Main tray UI
-|- App.css              App styling
-|- ProviderIcons.tsx    Provider marks
-`- main.tsx             Frontend entry
-
-src-tauri/              Rust backend
-|- src/
-|  |- lib.rs            Tauri app setup and commands
-|  `- providers/        Provider integrations
-|- capabilities/        Tauri capability configuration
-|- icons/               App and tray icons
-`- tauri.conf.json      App configuration
+src-tauri/target/release/
+src-tauri/target/release/bundle/nsis/
 ```
 
-## Contributing
+## Using Copilot
 
-Contributions are welcome. Start with [CONTRIBUTING.md](./CONTRIBUTING.md) for setup and contribution expectations.
+GitHub Copilot support depends on GitHub CLI auth being present locally.
 
-For security issues, do not open a public issue. Use [SECURITY.md](./SECURITY.md).
+Install GitHub CLI and log in:
+
+```powershell
+gh auth login
+gh auth status
+```
+
+Without that local auth state, UsageDock cannot read Copilot usage for the current implementation.
+
+## Release Process
+
+Public releases are cut from `main`.
+
+Before tagging a release, keep versions aligned in:
+
+- `package.json`
+- `package-lock.json`
+- `src-tauri/Cargo.toml`
+- `src-tauri/Cargo.lock`
+- `src-tauri/tauri.conf.json`
+
+Releases are triggered by pushing a tag matching `v*`.
+
+Example:
+
+```bash
+git tag v0.2.10
+git push origin main
+git push origin v0.2.10
+```
+
+The GitHub Actions release workflow lives at:
+
+```text
+.github/workflows/release.yml
+```
+
+## Updater Notes
+
+UsageDock supports in-app updates for packaged releases.
+
+Updater signing and release automation details are maintained separately from this README.
+
+If you are working on release infrastructure, updater signing, or GitHub Actions release setup, use:
+
+- [UPDATER_SETUP.md](./UPDATER_SETUP.md)
+- the release workflow at `.github/workflows/release.yml`
+
+## Open Source Project Files
+
+This repo includes:
+
+- [LICENSE](./LICENSE)
+- [CONTRIBUTING.md](./CONTRIBUTING.md)
+- [SECURITY.md](./SECURITY.md)
+- [CODE_OF_CONDUCT.md](./CODE_OF_CONDUCT.md)
+- [CHANGELOG.md](./CHANGELOG.md)
+
+If you are contributing, start with [CONTRIBUTING.md](./CONTRIBUTING.md).
+
+If you are reporting a security issue, do not file a public bug report. Use [SECURITY.md](./SECURITY.md).
+
+## Current Caveats
+
+- Windsurf depends on local language-server behavior and is the most environment-sensitive provider.
+
 
 ## License
 
