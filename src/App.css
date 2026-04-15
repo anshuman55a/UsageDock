@@ -236,8 +236,16 @@ body {
   border-bottom: 1px solid var(--color-border);
   background:
     linear-gradient(180deg, rgba(13, 19, 28, 0.96), rgba(10, 15, 22, 0.96));
-  animation: settingsSlide 0.22s cubic-bezier(0.22, 1, 0.36, 1) both;
   flex-shrink: 0;
+  transform-origin: top center;
+}
+
+.settings-panel-opening {
+  animation: settingsSlideIn 0.22s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.settings-panel-closing {
+  animation: settingsSlideOut 0.2s cubic-bezier(0.4, 0, 1, 1) both;
 }
 
 .settings-row {
@@ -291,7 +299,7 @@ body {
   opacity: 0.6;
 }
 
-@keyframes settingsSlide {
+@keyframes settingsSlideIn {
   0% {
     opacity: 0;
     transform: translateY(-6px);
@@ -305,6 +313,20 @@ body {
   }
 }
 
+@keyframes settingsSlideOut {
+  0% {
+    opacity: 1;
+    transform: translateY(0);
+    max-height: 120px;
+  }
+
+  100% {
+    opacity: 0;
+    transform: translateY(-4px);
+    max-height: 0;
+  }
+}
+
 /* ─── Provider list ─── */
 
 .provider-list {
@@ -312,7 +334,7 @@ body {
   z-index: 0;
   flex: 1;
   overflow-y: auto;
-  padding: 10px 10px 12px;
+  padding: 9px 10px 11px;
 }
 
 .update-banner {
@@ -486,7 +508,7 @@ body {
   --provider-accent: var(--color-accent);
   --provider-accent-soft: var(--color-accent-soft);
   position: relative;
-  margin-bottom: 10px;
+  margin-bottom: 8px;
   overflow: hidden;
   border: 1px solid var(--color-border);
   border-radius: 16px;
@@ -550,13 +572,13 @@ body {
   align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
-  padding: 14px 14px 10px;
+  padding: 12px 12px 8px;
 }
 
 .provider-info {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   min-width: 0;
 }
 
@@ -582,7 +604,7 @@ body {
   display: flex;
   flex-direction: column;
   min-width: 0;
-  gap: 3px;
+  gap: 2px;
 }
 
 .provider-name-row {
@@ -613,18 +635,32 @@ body {
 }
 
 .provider-caption {
-  color: var(--color-text-muted);
+  color: rgba(167, 180, 194, 0.84);
   font-size: 11px;
 }
 
 .provider-refresh {
-  opacity: 0.7;
-  background: rgba(255, 255, 255, 0.03);
-  border-color: rgba(148, 163, 184, 0.08);
+  width: 26px;
+  height: 26px;
+  opacity: 0;
+  background: rgba(255, 255, 255, 0.015);
+  border-color: rgba(148, 163, 184, 0.04);
+  pointer-events: none;
+  transform: translateY(1px);
 }
 
-.provider-card:hover .provider-refresh {
-  opacity: 1;
+.provider-card:hover .provider-refresh,
+.provider-card:focus-within .provider-refresh,
+.provider-refresh.spinning {
+  opacity: 0.9;
+  pointer-events: auto;
+  transform: translateY(0);
+}
+
+.provider-card:hover .provider-refresh,
+.provider-card:focus-within .provider-refresh {
+  background: rgba(255, 255, 255, 0.03);
+  border-color: rgba(148, 163, 184, 0.08);
 }
 
 /* ─── Metrics ─── */
@@ -632,14 +668,22 @@ body {
 .metric-lines {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  padding: 0 14px 14px;
+  gap: 8px;
+  padding: 0 12px 12px;
+}
+
+.provider-card-dense-metrics .metric-lines {
+  gap: 7px;
 }
 
 .progress-metric {
   display: flex;
   flex-direction: column;
-  gap: 5px;
+  gap: 4px;
+}
+
+.provider-card-dense-metrics .progress-metric {
+  gap: 3px;
 }
 
 .progress-header {
@@ -666,7 +710,7 @@ body {
 
 .progress-track {
   position: relative;
-  height: 7px;
+  height: 5px;
   overflow: hidden;
   border: 1px solid rgba(148, 163, 184, 0.08);
   border-radius: 999px;
@@ -690,8 +734,9 @@ body {
 }
 
 .progress-subtitle {
-  color: var(--color-text-muted);
+  color: rgba(126, 142, 160, 0.88);
   font-size: 10px;
+  letter-spacing: 0.01em;
 }
 
 .text-metric,
@@ -733,19 +778,26 @@ body {
 
 .provider-error,
 .provider-loading {
-  padding: 0 14px 14px;
+  padding: 0 12px 12px;
 }
 
 .error-msg {
   display: flex;
   align-items: flex-start;
   gap: 8px;
+  min-width: 0;
   padding: 10px 11px;
   border: 1px solid rgba(222, 106, 95, 0.18);
   border-radius: 12px;
   background: rgba(222, 106, 95, 0.08);
   color: #f3b0a8;
   font-size: 11px;
+}
+
+.error-msg span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .error-msg svg {
@@ -757,7 +809,7 @@ body {
 
 .skeleton {
   position: relative;
-  height: 7px;
+  height: 5px;
   overflow: hidden;
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.06);

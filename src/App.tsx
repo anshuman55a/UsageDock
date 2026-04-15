@@ -213,6 +213,7 @@ function ProviderCard({
   const style = PROVIDER_STYLES[provider.id] || { bg: "#666" };
   const IconComponent = PROVIDER_ICONS[provider.id];
   const accent = provider.brandColor || style.bg;
+  const progressLineCount = provider.lines.filter((line) => line.type === "progress").length;
   const sharedResetLabel = provider.error ? null : getSharedResetLabel(provider.lines);
   const providerCaption = provider.error
     ? "Connection needs attention"
@@ -230,7 +231,7 @@ function ProviderCard({
 
   return (
     <div
-      className={`provider-card ${provider.error ? "provider-card-error" : ""}`}
+      className={`provider-card ${provider.error ? "provider-card-error" : ""} ${progressLineCount > 1 ? "provider-card-dense-metrics" : ""}`}
       style={providerCardStyle}
     >
       <div className="provider-card-header">
@@ -316,9 +317,11 @@ function App() {
   });
   const [isIntervalMenuOpen, setIsIntervalMenuOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isSettingsClosing, setIsSettingsClosing] = useState(false);
   const intervalMenuRef = useRef<HTMLDivElement>(null);
   const settingsPanelRef = useRef<HTMLDivElement>(null);
   const settingsBtnRef = useRef<HTMLButtonElement>(null);
+  const settingsCloseTimeoutRef = useRef<number | null>(null);
   const availableProviders = providers.filter((provider) => !provider.error && provider.lines.length > 0);
   const unavailableProviders = providers.filter((provider) => provider.error || provider.lines.length === 0);
   const unavailableCaption = availableProviders.length > 0
@@ -402,6 +405,30 @@ function App() {
     }
   }, []);
 
+  const closeSettings = useCallback(() => {
+    setIsIntervalMenuOpen(false);
+    setIsSettingsClosing(true);
+    setIsSettingsOpen(false);
+
+    if (settingsCloseTimeoutRef.current !== null) {
+      window.clearTimeout(settingsCloseTimeoutRef.current);
+    }
+
+    settingsCloseTimeoutRef.current = window.setTimeout(() => {
+      setIsSettingsClosing(false);
+      settingsCloseTimeoutRef.current = null;
+    }, 220);
+  }, []);
+
+  const openSettings = useCallback(() => {
+    if (settingsCloseTimeoutRef.current !== null) {
+      window.clearTimeout(settingsCloseTimeoutRef.current);
+      settingsCloseTimeoutRef.current = null;
+    }
+    setIsSettingsClosing(false);
+    setIsSettingsOpen(true);
+  }, []);
+
   useEffect(() => {
     refreshAll();
   }, [refreshAll]);
@@ -459,7 +486,7 @@ function App() {
   }, [isIntervalMenuOpen]);
 
   useEffect(() => {
-    if (!isSettingsOpen) {
+    if (!isSettingsOpen && !isSettingsClosing) {
       return;
     }
 
@@ -470,15 +497,13 @@ function App() {
         settingsBtnRef.current &&
         !settingsBtnRef.current.contains(event.target as Node)
       ) {
-        setIsSettingsOpen(false);
-        setIsIntervalMenuOpen(false);
+        closeSettings();
       }
     }
 
     function handleEscape(event: KeyboardEvent) {
       if (event.key === "Escape") {
-        setIsSettingsOpen(false);
-        setIsIntervalMenuOpen(false);
+        closeSettings();
       }
     }
 
@@ -488,7 +513,44 @@ function App() {
       window.removeEventListener("mousedown", handlePointerDown);
       window.removeEventListener("keydown", handleEscape);
     };
-  }, [isSettingsOpen]);
+  }, [closeSettings, isSettingsClosing, isSettingsOpen]);
+
+  useEffect(() => () => {
+    if (settingsCloseTimeoutRef.current !== null) {
+      window.clearTimeout(settingsCloseTimeoutRef.current);
+    }
+  }, []);
+
+  useEffect(() => {
+    function handleRefreshShortcut(event: KeyboardEvent) {
+      if (event.defaultPrevented || event.repeat) {
+        return;
+      }
+
+      if (event.ctrlKey || event.metaKey || event.altKey) {
+        return;
+      }
+
+      const target = event.target as HTMLElement | null;
+      const tagName = target?.tagName;
+      if (
+        target?.isContentEditable ||
+        tagName === "INPUT" ||
+        tagName === "TEXTAREA" ||
+        tagName === "SELECT"
+      ) {
+        return;
+      }
+
+      if (event.key.toLowerCase() === "r") {
+        event.preventDefault();
+        refreshAll();
+      }
+    }
+
+    window.addEventListener("keydown", handleRefreshShortcut);
+    return () => window.removeEventListener("keydown", handleRefreshShortcut);
+  }, [refreshAll]);
 
   const autoRefreshSummary = autoRefreshEnabled
     ? `Auto refresh every ${autoRefreshMinutes} min`
@@ -511,8 +573,11 @@ function App() {
             ref={settingsBtnRef}
             className={`btn-icon settings-btn ${isSettingsOpen ? "settings-btn-active" : ""}`}
             onClick={() => {
-              setIsSettingsOpen((prev) => !prev);
-              if (isSettingsOpen) setIsIntervalMenuOpen(false);
+              if (isSettingsOpen) {
+                closeSettings();
+              } else {
+                openSettings();
+              }
             }}
             title="Settings"
             aria-label="Toggle settings"
@@ -522,7 +587,7 @@ function App() {
           <button
             className={`btn-icon refresh-all ${isLoading ? "spinning" : ""}`}
             onClick={refreshAll}
-            title="Refresh all"
+            title="Refresh all (R)"
             aria-label="Refresh all providers"
           >
             <RefreshCw />
@@ -530,8 +595,11 @@ function App() {
         </div>
       </div>
 
-      {isSettingsOpen && (
-        <div className="settings-panel" ref={settingsPanelRef}>
+      {(isSettingsOpen || isSettingsClosing) && (
+        <div
+          className={`settings-panel ${isSettingsClosing ? "settings-panel-closing" : "settings-panel-opening"}`}
+          ref={settingsPanelRef}
+        >
           <div className="settings-row">
             <label className="toggle-field">
               <span className="toggle-label">Auto refresh</span>
