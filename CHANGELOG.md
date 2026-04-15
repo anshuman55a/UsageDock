@@ -2,6 +2,12 @@
 
 All notable changes to UsageDock are documented here.
 
+## [0.2.9] - 2026-04-15
+
+- Refined provider card density, reset-text readability, and multi-metric spacing for a cleaner tray view.
+- Added a smooth settings-panel close animation and a keyboard `R` shortcut for refresh-all while focused.
+- Improved per-card refresh affordance behavior and fixed long provider error messages so they wrap cleanly inside the card.
+
 ## [0.2.8] - 2026-04-15
 
 - Compressed the tray header into a single tighter row and moved refresh settings into a top settings panel.
